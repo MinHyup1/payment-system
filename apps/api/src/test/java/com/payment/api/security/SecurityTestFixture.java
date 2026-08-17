@@ -23,13 +23,12 @@ final class SecurityTestFixture {
 
     static String adminToken(String scope) throws JOSEException {
         Instant now = Instant.now(Clock.systemUTC());
-        JWTClaimsSet claims =
-                new JWTClaimsSet.Builder()
-                        .subject("admin-1")
-                        .claim("scope", scope)
-                        .issueTime(Date.from(now))
-                        .expirationTime(Date.from(now.plus(Duration.ofMinutes(5))))
-                        .build();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .subject("admin-1")
+                .claim("scope", scope)
+                .issueTime(Date.from(now))
+                .expirationTime(Date.from(now.plus(Duration.ofMinutes(5))))
+                .build();
         SignedJWT jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.HS256), claims);
         jwt.sign(new MACSigner(ADMIN_JWT_SECRET.getBytes(StandardCharsets.UTF_8)));
         return jwt.serialize();
