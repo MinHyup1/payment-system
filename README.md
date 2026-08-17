@@ -8,6 +8,7 @@ Java 25 + Spring Boot 4 + Apache Kafka 기반 결제 시스템.
 ## 문서
 
 - [설계서](docs/payment-system-plan.md) — 터지는 문제 10가지와 각각의 증명 방법, 구현 로드맵 Phase 0~9
+- [컨벤션](docs/CONVENTIONS.md) — Git · 이슈/PR · 코드 · 테스트 작업 규칙
 
 ## 현재 상태
 
