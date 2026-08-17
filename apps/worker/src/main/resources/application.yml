@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: payment-worker
+  profiles:
+    default: worker
+  main:
+    web-application-type: none
