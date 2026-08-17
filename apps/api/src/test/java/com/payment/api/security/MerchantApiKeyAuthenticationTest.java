@@ -23,7 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @ExtendWith(OutputCaptureExtension.class)
 class MerchantApiKeyAuthenticationTest {
 
-    @Autowired private MockMvc mockMvc;
+    @Autowired
+    private MockMvc mockMvc;
 
     @Test
     void API_키가_없으면_401을_반환한다() throws Exception {
@@ -32,19 +33,14 @@ class MerchantApiKeyAuthenticationTest {
 
     @Test
     void 등록되지_않은_API_키는_401을_반환한다() throws Exception {
-        mockMvc.perform(
-                        get("/probe/merchant")
-                                .header(ApiKeyAuthenticationFilter.HEADER, "unknown-key"))
+        mockMvc.perform(get("/probe/merchant").header(ApiKeyAuthenticationFilter.HEADER, "unknown-key"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void 유효한_API_키는_merchantId를_인증_주체로_세운다() throws Exception {
-        mockMvc.perform(
-                        get("/probe/merchant")
-                                .header(
-                                        ApiKeyAuthenticationFilter.HEADER,
-                                        SecurityTestFixture.MERCHANT_API_KEY))
+        mockMvc.perform(get("/probe/merchant")
+                        .header(ApiKeyAuthenticationFilter.HEADER, SecurityTestFixture.MERCHANT_API_KEY))
                 .andExpect(status().isOk())
                 .andExpect(content().string("m_1001"));
     }

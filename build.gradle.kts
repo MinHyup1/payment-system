@@ -43,10 +43,11 @@ configure(subprojects.filter { it.childProjects.isEmpty() }) {
         useJUnitPlatform()
     }
 
-    // 컨벤션 3.9 — 포맷은 논쟁하지 않는다. google-java-format(AOSP) = 들여쓰기 4칸.
+    // 컨벤션 3.9 — 포맷은 논쟁하지 않는다. palantir-java-format = 들여쓰기 4칸, 줄 길이 120.
+    // google-java-format 은 줄 길이가 100자로 고정이라 컨벤션의 120을 지킬 수 없어 교체했다.
     extensions.configure<com.diffplug.gradle.spotless.SpotlessExtension> {
         java {
-            googleJavaFormat("1.36.1").aosp()
+            palantirJavaFormat("2.97.0")
             removeUnusedImports()
             trimTrailingWhitespace()
             endWithNewline()

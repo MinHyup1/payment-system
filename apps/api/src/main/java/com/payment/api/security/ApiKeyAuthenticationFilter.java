@@ -28,33 +28,23 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
     ApiKeyAuthenticationFilter(MerchantApiKeyProperties properties) {
         // Phase 1 에서 가맹점 테이블 조회로 교체한다. 지금은 설정값이 유일한 출처다.
-        this.merchantIdByApiKey =
-                properties.apiKeys().entrySet().stream()
-                        .collect(
-                                Collectors.toUnmodifiableMap(
-                                        Map.Entry::getValue, Map.Entry::getKey));
+        this.merchantIdByApiKey = properties.apiKeys().entrySet().stream()
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getValue, Map.Entry::getKey));
     }
 
     @Override
-    protected void doFilterInternal(
-            HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String apiKey = request.getHeader(HEADER);
         if (apiKey != null) {
             String merchantId = merchantIdByApiKey.get(apiKey);
             if (merchantId == null) {
                 // 컨벤션 3.8 — 시크릿 전문은 로그에 남기지 않는다.
-                log.warn(
-                        "등록되지 않은 API Key 요청. key={} path={}",
-                        mask(apiKey),
-                        request.getRequestURI());
+                log.warn("등록되지 않은 API Key 요청. key={} path={}", mask(apiKey), request.getRequestURI());
             } else {
                 SecurityContextHolder.getContext()
-                        .setAuthentication(
-                                new UsernamePasswordAuthenticationToken(
-                                        merchantId,
-                                        null,
-                                        List.of(new SimpleGrantedAuthority("ROLE_MERCHANT"))));
+                        .setAuthentication(new UsernamePasswordAuthenticationToken(
+                                merchantId, null, List.of(new SimpleGrantedAuthority("ROLE_MERCHANT"))));
             }
         }
         chain.doFilter(request, response);

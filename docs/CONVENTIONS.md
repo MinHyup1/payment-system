@@ -365,7 +365,8 @@ lombok.allArgsConstructor.flagUsage = ERROR
 
 ### 3.9 포맷팅
 
-- **Spotless + google-java-format (AOSP)** — 들여쓰기 4칸, 줄 길이 120.
+- **Spotless + palantir-java-format** — 들여쓰기 4칸, 줄 길이 120.
+- 이 포매터도 **설정 항목이 없다.** 처음에 쓰던 google-java-format 은 줄 길이가 100자 고정이라 위 규칙을 지킬 수 없어 교체했다.
 - `./gradlew spotlessApply` 로 정리하고, CI에서 `spotlessCheck` 로 강제한다.
 - **포맷은 논쟁하지 않는다.** 도구가 정한 대로 따르고 리뷰에서 다루지 않는다.
 
