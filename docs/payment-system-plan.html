@@ -1,0 +1,1676 @@
+<title>카프카 결제 시스템 설계서</title>
+<style>
+  :root {
+    --bg: #F3F4F7;
+    --surface: #FFFFFF;
+    --surface-2: #FAFAFC;
+    --ink: #14161C;
+    --ink-2: #3A3F4B;
+    --muted: #666D7C;
+    --line: #DCDFE7;
+    --line-soft: #E9EBF1;
+    --accent: #3B4CA8;
+    --accent-ink: #2C3A85;
+    --accent-soft: #E7EAF7;
+    --ok: #0E7350;
+    --ok-soft: #E1F1EA;
+    --warn: #9A6712;
+    --warn-soft: #F6EEDC;
+    --crit: #A93B36;
+    --crit-soft: #F7E7E6;
+    --code-bg: #F1F2F6;
+
+    --sans: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont,
+            "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+            "D2Coding", "Nanum Gothic Coding", monospace;
+
+    --measure: 74ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0F1116;
+      --surface: #16181F;
+      --surface-2: #1B1E26;
+      --ink: #E7E9EF;
+      --ink-2: #C2C7D2;
+      --muted: #98A0AF;
+      --line: #272B35;
+      --line-soft: #21252E;
+      --accent: #8E9BEF;
+      --accent-ink: #A7B2F5;
+      --accent-soft: #1D2140;
+      --ok: #4CBC91;
+      --ok-soft: #122B23;
+      --warn: #D9A544;
+      --warn-soft: #2E2617;
+      --crit: #E28078;
+      --crit-soft: #331E1D;
+      --code-bg: #1C1F28;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0F1116;
+    --surface: #16181F;
+    --surface-2: #1B1E26;
+    --ink: #E7E9EF;
+    --ink-2: #C2C7D2;
+    --muted: #98A0AF;
+    --line: #272B35;
+    --line-soft: #21252E;
+    --accent: #8E9BEF;
+    --accent-ink: #A7B2F5;
+    --accent-soft: #1D2140;
+    --ok: #4CBC91;
+    --ok-soft: #122B23;
+    --warn: #D9A544;
+    --warn-soft: #2E2617;
+    --crit: #E28078;
+    --crit-soft: #331E1D;
+    --code-bg: #1C1F28;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+    word-break: keep-all;
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 120px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0 56px;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 18px;
+  }
+  .masthead h1 {
+    font-size: clamp(32px, 5.2vw, 50px);
+    line-height: 1.18;
+    font-weight: 800;
+    letter-spacing: -0.028em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .lede {
+    font-size: 18px;
+    line-height: 1.7;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 28px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    padding: 5px 11px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--surface);
+    color: var(--ink-2);
+  }
+  .chip.is-key {
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+  }
+
+  /* ---------- table of contents ---------- */
+
+  .toc { display: none; }
+
+  /* ---------- main column ---------- */
+
+  main {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  section {
+    padding-top: 64px;
+    scroll-margin-top: 24px;
+  }
+  section > h2 {
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.13em;
+    color: var(--accent-ink);
+    display: block;
+    margin-bottom: 10px;
+  }
+  .sec-note {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 0 0 28px;
+    max-width: var(--measure);
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    margin: 40px 0 12px;
+    line-height: 1.45;
+  }
+  h4 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 26px 0 8px;
+  }
+  p { max-width: var(--measure); margin: 0 0 16px; }
+  ul, ol { max-width: var(--measure); margin: 0 0 16px; padding-left: 22px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--muted); }
+  strong { font-weight: 700; color: var(--ink); }
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.855em;
+    background: var(--code-bg);
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.65;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 0 0 18px;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; word-break: normal; }
+
+  /* ---------- generic blocks ---------- */
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .panel > :last-child { margin-bottom: 0; }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 16px 20px;
+    border-radius: 0 5px 5px 0;
+    margin: 0 0 20px;
+    max-width: var(--measure);
+  }
+  .callout > :last-child { margin-bottom: 0; }
+  .callout p { max-width: none; font-size: 15px; }
+
+  .tablewrap { overflow-x: auto; margin: 0 0 20px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 520px;
+    font-size: 14.5px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    line-height: 1.6;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.tight { white-space: nowrap; font-family: var(--mono); font-size: 13px; }
+
+  /* ---------- state pills ---------- */
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+  .pill.crit { background: var(--crit-soft); color: var(--crit); border-color: var(--crit); }
+  .pill.neutral { background: var(--surface-2); color: var(--muted); border-color: var(--line); }
+
+  /* ---------- sync / async boundary flow ---------- */
+
+  .boundary {
+    display: grid;
+    gap: 14px;
+    margin: 0 0 8px;
+  }
+  .lane {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    padding: 18px 20px 20px;
+  }
+  .lane-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .lane-tag {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .lane.sync .lane-tag { background: var(--accent-soft); color: var(--accent-ink); }
+  .lane.async .lane-tag { background: var(--warn-soft); color: var(--warn); }
+  .lane-desc { font-size: 14px; color: var(--muted); }
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    max-width: none;
+  }
+  .steps li {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--surface-2);
+    margin: 0;
+    color: var(--ink-2);
+  }
+  .steps .arrow {
+    border: none;
+    background: none;
+    color: var(--muted);
+    padding: 0 1px;
+  }
+  .steps .fan {
+    border-style: dashed;
+  }
+  .budget {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ---------- state machine svg ---------- */
+
+  figure {
+    margin: 0 0 22px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    padding: 20px 4px 8px;
+  }
+  .svgscroll { overflow-x: auto; }
+  figure svg { display: block; min-width: 760px; width: 100%; height: auto; margin: 0 auto; }
+  figcaption {
+    font-size: 13px;
+    color: var(--muted);
+    padding: 10px 20px 6px;
+    border-top: 1px solid var(--line-soft);
+    margin-top: 10px;
+  }
+  .node-box { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+  .node-box.ok { fill: var(--ok-soft); stroke: var(--ok); }
+  .node-box.warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .node-box.crit { fill: var(--crit-soft); stroke: var(--crit); }
+  .node-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    fill: var(--ink);
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+  .node-text.ok { fill: var(--ok); }
+  .node-text.warn { fill: var(--warn); }
+  .node-text.crit { fill: var(--crit); }
+  .edge { fill: none; stroke: var(--muted); stroke-width: 1.3; }
+  .edge.dashed { stroke-dasharray: 5 4; }
+  .edge-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    fill: var(--muted);
+  }
+
+  /* ---------- problem entries ---------- */
+
+  .problem {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .problem > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 16px 20px;
+    display: flex;
+    gap: 14px;
+    align-items: baseline;
+    font-weight: 700;
+    font-size: 16.5px;
+    letter-spacing: -0.01em;
+  }
+  .problem > summary::-webkit-details-marker { display: none; }
+  .problem > summary::after {
+    content: "+";
+    margin-left: auto;
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: 17px;
+    color: var(--muted);
+    line-height: 1;
+  }
+  .problem[open] > summary::after { content: "\2212"; }
+  .problem[open] > summary { border-bottom: 1px solid var(--line-soft); }
+  .p-key {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--accent-ink);
+    flex: none;
+    padding-top: 3px;
+  }
+  .p-body { padding: 20px 20px 22px 20px; }
+  .p-body > :last-child { margin-bottom: 0; }
+  .p-row { margin-bottom: 18px; }
+  .p-row:last-child { margin-bottom: 0; }
+  .p-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .p-row p, .p-row ul, .p-row ol { max-width: 68ch; margin-bottom: 10px; }
+  .p-row > :last-child { margin-bottom: 0; }
+  .p-row.proof {
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+    padding: 14px 16px;
+  }
+  .p-row.proof .p-label { color: var(--ok); }
+
+  /* ---------- roadmap ---------- */
+
+  .phase {
+    display: grid;
+    grid-template-columns: 74px 1fr;
+    gap: 0 20px;
+    border-top: 1px solid var(--line);
+    padding: 20px 0;
+    align-items: start;
+  }
+  .phase:last-of-type { border-bottom: 1px solid var(--line); }
+  .phase-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--accent-ink);
+    padding-top: 3px;
+  }
+  .phase-id span { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .phase h3 { margin: 0 0 6px; font-size: 16.5px; }
+  .phase p, .phase ul { margin-bottom: 0; }
+  .phase ul { padding-left: 20px; }
+  .deliver {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+  }
+
+  /* ---------- q&a ---------- */
+
+  .qa { border-top: 1px solid var(--line-soft); padding: 16px 0; max-width: var(--measure); }
+  .qa:first-of-type { border-top: 1px solid var(--line); }
+  .qa-q { font-weight: 700; margin: 0 0 8px; }
+  .qa-q::before { content: "Q. "; font-family: var(--mono); color: var(--accent-ink); font-weight: 400; }
+  .qa-a { margin: 0; color: var(--ink-2); font-size: 15px; }
+
+  .footnote {
+    margin-top: 72px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    font-size: 13.5px;
+    color: var(--muted);
+    max-width: var(--measure);
+  }
+
+  /* ---------- wide layout ---------- */
+
+  @media (min-width: 1080px) {
+    .shell { grid-template-columns: 216px minmax(0, 1fr); }
+    .masthead { grid-column: 1 / -1; }
+    .toc {
+      display: block;
+      grid-column: 1;
+      position: sticky;
+      top: 32px;
+      align-self: start;
+      padding-top: 68px;
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+    }
+    .toc p {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+    .toc ol { list-style: none; padding: 0; margin: 0; }
+    .toc li { margin-bottom: 3px; }
+    .toc a {
+      display: flex;
+      gap: 9px;
+      font-size: 13.5px;
+      line-height: 1.45;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 4px 0;
+    }
+    .toc a:hover { color: var(--accent-ink); }
+    .toc a b { font-family: var(--mono); font-size: 11px; font-weight: 400; padding-top: 2px; flex: none; }
+    main { grid-column: 2; }
+    .boundary { gap: 16px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Toy Project · Design Document · 2026</p>
+    <h1>카프카 기반 결제 시스템 설계서</h1>
+    <p class="lede">
+      Java 25 + Spring Boot 4 로 결제 승인 API를 만들고, 승인 이후의 모든 후속 처리를 Kafka로 분리한다.
+      이 문서의 목적은 기능 목록이 아니라 <strong>결제에서 실제로 터지는 문제 10가지를 어떻게 막고, 막았다는 것을 어떻게 증명할지</strong>를
+      먼저 정하는 것이다.
+    </p>
+    <div class="chips">
+      <span class="chip is-key">Java 25 LTS</span>
+      <span class="chip is-key">Spring Boot 4.0</span>
+      <span class="chip is-key">Apache Kafka 4.x · KRaft</span>
+      <span class="chip">PostgreSQL 17</span>
+      <span class="chip">Redis</span>
+      <span class="chip">Testcontainers</span>
+      <span class="chip">Toxiproxy</span>
+      <span class="chip">k6</span>
+      <span class="chip">OpenTelemetry</span>
+      <span class="chip">Grafana</span>
+      <span class="chip">Docker Compose</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="목차">
+    <p>Contents</p>
+    <ol>
+      <li><a href="#s1"><b>01</b><span>증명하려는 것</span></a></li>
+      <li><a href="#s2"><b>02</b><span>동기 / 비동기 경계</span></a></li>
+      <li><a href="#s3"><b>03</b><span>아키텍처와 모듈</span></a></li>
+      <li><a href="#s4"><b>04</b><span>결제 상태 머신</span></a></li>
+      <li><a href="#s5"><b>05</b><span>터지는 문제 10가지</span></a></li>
+      <li><a href="#s6"><b>06</b><span>Kafka 설계</span></a></li>
+      <li><a href="#s7"><b>07</b><span>데이터 모델</span></a></li>
+      <li><a href="#s8"><b>08</b><span>성능 계획</span></a></li>
+      <li><a href="#s9"><b>09</b><span>관측성</span></a></li>
+      <li><a href="#s10"><b>10</b><span>테스트 전략</span></a></li>
+      <li><a href="#s11"><b>11</b><span>구현 로드맵</span></a></li>
+      <li><a href="#s12"><b>12</b><span>MSA 전환 시나리오</span></a></li>
+      <li><a href="#s13"><b>13</b><span>클라우드 전환</span></a></li>
+      <li><a href="#s14"><b>14</b><span>예상 질문</span></a></li>
+      <li><a href="#s15"><b>15</b><span>하지 않을 것</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ============ 01 ============ -->
+    <section id="s1">
+      <span class="sec-num">01 — Objective</span>
+      <h2>이 프로젝트로 증명하려는 것</h2>
+      <p class="sec-note">기능이 아니라 판단을 보여주는 문서. 네 축 모두 "구현했다"가 아니라 "숫자와 테스트로 증명했다"까지 가야 한다.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>축</th><th>증명 방법</th><th>결과물</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>정합성 / 멱등성</strong></td>
+              <td>같은 멱등키로 동시 100요청 → 승인 1건. 원장 차·대변 합계가 항상 0.</td>
+              <td class="tight">동시성 테스트 + 불변식 속성 테스트</td>
+            </tr>
+            <tr>
+              <td><strong>장애 대응 / 복구</strong></td>
+              <td>Toxiproxy로 PG 절단·지연 주입, Kafka 브로커 강제 종료. 미확정 결제가 자동 수렴하는지.</td>
+              <td class="tight">카오스 시나리오 6종 리포트</td>
+            </tr>
+            <tr>
+              <td><strong>성능 / 대용량</strong></td>
+              <td>k6 부하 → 병목 특정 → 튜닝 → 재측정. 가상 스레드 × 커넥션 풀 매트릭스 실험.</td>
+              <td class="tight">PERFORMANCE.md (before/after)</td>
+            </tr>
+            <tr>
+              <td><strong>관측성 / 운영</strong></td>
+              <td>HTTP → Kafka → Worker 까지 하나의 trace로 연결. 결제 실패율·컨슈머 lag 알람.</td>
+              <td class="tight">Grafana 대시보드 3종</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <p><strong>이 프로젝트의 차별점은 "실패 경로"다.</strong> 대부분의 포트폴리오 결제 프로젝트는 성공 경로만 있다.
+        PG가 타임아웃 났을 때 승인됐는지 안 됐는지 모르는 상태를 어떻게 수렴시키는지가 이 문서 분량의 절반을 차지하는 이유다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 02 ============ -->
+    <section id="s2">
+      <span class="sec-num">02 — Boundary</span>
+      <h2>동기 / 비동기 경계를 먼저 긋는다</h2>
+      <p class="sec-note">Kafka를 어디에 쓸지보다 <strong>어디에 쓰지 않을지</strong>가 먼저다. 승인 경로에 브로커를 끼워넣으면 지연만 늘고 얻는 게 없다.</p>
+
+      <div class="boundary">
+        <div class="lane sync">
+          <div class="lane-head">
+            <span class="lane-tag">동기 · HTTP</span>
+            <span class="lane-desc">사용자가 응답을 기다리는 구간. 여기서 결제 성패가 확정된다.</span>
+          </div>
+          <ul class="steps">
+            <li>멱등키 선점</li><li class="arrow">→</li>
+            <li>PENDING 선기록</li><li class="arrow">→</li>
+            <li>PG 승인 호출</li><li class="arrow">→</li>
+            <li>상태 확정 + Outbox 적재</li><li class="arrow">→</li>
+            <li>승인/거절 응답</li>
+          </ul>
+          <p class="budget">지연 예산 — 자체 처리 40ms + PG 왕복 200ms ≈ p99 300ms 목표</p>
+        </div>
+
+        <div class="lane async">
+          <div class="lane-head">
+            <span class="lane-tag">비동기 · Kafka</span>
+            <span class="lane-desc">응답 이후. 느려도 되지만 절대 유실되면 안 되는 구간.</span>
+          </div>
+          <ul class="steps">
+            <li>Outbox Relay</li><li class="arrow">→</li>
+            <li><code>payment.v1.events</code></li><li class="arrow">→</li>
+            <li class="fan">원장 기록</li>
+            <li class="fan">정산 적재</li>
+            <li class="fan">알림 발송</li>
+            <li class="fan">집계</li>
+            <li class="fan">미확정 결제 복구</li>
+          </ul>
+          <p class="budget">지연 예산 — 원장 반영 1초 이내, 정산·알림은 분 단위 허용</p>
+        </div>
+      </div>
+
+      <h3>이 경계를 지키는 규칙 세 가지</h3>
+      <ol>
+        <li><strong>돈의 상태 변경은 동기 구간에서만 확정한다.</strong> Kafka 컨슈머는 결제 상태를 만들지 않고, 확정된 상태를 <em>소비</em>만 한다. 예외는 미확정 결제 복구 하나뿐이고, 이건 별도 상태 전이 규칙을 따른다.</li>
+        <li><strong>동기 구간은 절대 Kafka에 직접 produce 하지 않는다.</strong> 브로커가 죽어도 결제는 성공해야 한다. 그래서 Outbox 테이블에 같은 트랜잭션으로 쓰고 끝낸다.</li>
+        <li><strong>비동기 구간의 지연은 사용자 응답에 영향을 주지 않는다.</strong> 원장 반영이 10초 밀려도 결제 응답은 이미 나갔다. 대신 "원장 미반영 결제 건수" 를 지표로 감시한다.</li>
+      </ol>
+    </section>
+
+    <!-- ============ 03 ============ -->
+    <section id="s3">
+      <span class="sec-num">03 — Architecture</span>
+      <h2>모듈러 모놀리스 + 워커 프로파일</h2>
+      <p class="sec-note">코드베이스 하나, 배포 단위 둘. 모듈 간 직접 호출을 빌드 레벨에서 막아두면 나중에 서비스 분리는 설정 변경 수준이 된다.</p>
+
+      <pre><code>payment-system/
+├─ modules/
+│  ├─ payment-domain/     결제 애그리거트, 상태 머신, 금액 VO. 프레임워크 의존 0
+│  ├─ payment-app/        승인/취소 유스케이스, 멱등성, Outbox 기록
+│  ├─ ledger/             복식부기 원장. payment 이벤트만 구독
+│  ├─ settlement/         일 단위 정산 + PG 대사(reconciliation)
+│  ├─ pg-adapter/         PgClient 인터페이스 + Mock/실PG 구현
+│  └─ shared-kernel/      이벤트 스키마, Money, 공통 에러
+├─ apps/
+│  ├─ api/                REST 엔드포인트. profile=api
+│  └─ worker/             Kafka 리스너 + 스케줄러. profile=worker
+└─ ops/
+   ├─ compose/            kafka, postgres, redis, grafana, toxiproxy
+   ├─ load/               k6 시나리오
+   └─ grafana/            대시보드 JSON</code></pre>
+
+      <h3>모듈 경계를 강제하는 방법</h3>
+      <ul>
+        <li>Gradle 의존성 그래프로 1차 차단 — <code>ledger</code> 는 <code>payment-app</code> 을 의존하지 않는다. 통신은 <code>shared-kernel</code> 의 이벤트 레코드로만.</li>
+        <li>ArchUnit 테스트로 2차 차단 — 모듈 간 패키지 참조 규칙을 테스트가 깨뜨린다. 이게 있으면 "MSA 전환 가능하다"는 말에 근거가 생긴다.</li>
+        <li>모듈마다 DB 스키마를 분리(<code>payment</code>, <code>ledger</code>, <code>settlement</code>)하고 크로스 스키마 조인을 금지. 나중에 DB를 쪼갤 때 쿼리를 안 고쳐도 된다.</li>
+      </ul>
+
+      <h3>Java 25에서 실제로 쓸 것</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>기능</th><th>어디에</th><th>얻는 것</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="tight">Virtual Threads</td>
+              <td>PG 호출 등 I/O 대기가 지배적인 승인 경로 (<code>spring.threads.virtual.enabled=true</code>)</td>
+              <td>동시 요청당 플랫폼 스레드를 점유하지 않음 → 8장의 실험 대상</td>
+            </tr>
+            <tr>
+              <td class="tight">Sealed interface<br>+ Record</td>
+              <td>결제 상태, 도메인 이벤트, PG 응답</td>
+              <td>switch 패턴 매칭에서 케이스 누락을 <strong>컴파일러가</strong> 잡음. 상태 하나 추가하면 처리 안 한 곳이 전부 빨개진다</td>
+            </tr>
+            <tr>
+              <td class="tight">Scoped Values<br><span class="pill neutral">JDK 25 정식</span></td>
+              <td>요청 컨텍스트(멱등키, traceId, merchantId) 전파</td>
+              <td>가상 스레드 환경에서 ThreadLocal 대체. 불변이라 누수·오염 없음</td>
+            </tr>
+            <tr>
+              <td class="tight">Structured Concurrency<br><span class="pill warn">preview</span></td>
+              <td>승인 전 리스크 체크 + 한도 조회를 병렬로 fan-out</td>
+              <td>하나 실패 시 나머지 자동 취소. <code>--enable-preview</code> 필요하므로 <strong>선택 과제로 두고, 실패하면 걷어낸다</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ 04 ============ -->
+    <section id="s4">
+      <span class="sec-num">04 — State Machine</span>
+      <h2>결제 상태 머신</h2>
+      <p class="sec-note">모든 정합성 문제는 결국 "허용되지 않은 상태 전이가 일어났다"로 환원된다. 그래서 전이표를 코드보다 먼저 확정한다.</p>
+
+      <figure>
+        <div class="svgscroll">
+        <svg viewBox="0 0 920 372" role="img" aria-labelledby="smtitle">
+          <title id="smtitle">결제 상태 전이도</title>
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"></path>
+            </marker>
+          </defs>
+
+          <!-- edges -->
+          <path class="edge" d="M165,182 L198,182" marker-end="url(#ah)"></path>
+          <path class="edge" d="M350,182 L383,182" marker-end="url(#ah)"></path>
+          <path class="edge" d="M277,160 L277,62 L383,62" marker-end="url(#ah)"></path>
+          <path class="edge" d="M277,204 L277,310 L383,310" marker-end="url(#ah)"></path>
+          <path class="edge" d="M462,160 L462,91" marker-end="url(#ah)"></path>
+          <path class="edge" d="M462,204 L462,281" marker-end="url(#ah)"></path>
+          <path class="edge dashed" d="M535,182 L568,182" marker-end="url(#ah)"></path>
+          <path class="edge" d="M535,62 L568,62" marker-end="url(#ah)"></path>
+          <path class="edge" d="M720,62 L753,62" marker-end="url(#ah)"></path>
+          <path class="edge" d="M420,40 L420,16 L830,16 L830,37" marker-end="url(#ah)"></path>
+
+          <!-- edge labels -->
+          <text class="edge-label" x="181" y="174">접수</text>
+          <text class="edge-label" x="292" y="120">PG 승인</text>
+          <text class="edge-label" x="292" y="262">PG 거절</text>
+          <text class="edge-label" x="356" y="174">타임아웃</text>
+          <text class="edge-label" x="472" y="128">조회=승인</text>
+          <text class="edge-label" x="472" y="248">조회=미승인</text>
+          <text class="edge-label" x="537" y="174">N회 실패</text>
+          <text class="edge-label" x="537" y="54">부분취소</text>
+          <text class="edge-label" x="722" y="54">잔액 0</text>
+          <text class="edge-label" x="600" y="10">전체취소 / 망취소</text>
+
+          <!-- nodes -->
+          <rect class="node-box" x="20" y="160" width="145" height="44" rx="5"></rect>
+          <text class="node-text" x="92" y="183">READY</text>
+
+          <rect class="node-box" x="198" y="160" width="145" height="44" rx="5"></rect>
+          <text class="node-text" x="270" y="183">PENDING</text>
+
+          <rect class="node-box ok" x="383" y="40" width="145" height="44" rx="5"></rect>
+          <text class="node-text ok" x="455" y="63">APPROVED</text>
+
+          <rect class="node-box warn" x="383" y="160" width="145" height="44" rx="5"></rect>
+          <text class="node-text warn" x="455" y="183">UNKNOWN</text>
+
+          <rect class="node-box crit" x="383" y="288" width="145" height="44" rx="5"></rect>
+          <text class="node-text crit" x="455" y="311">FAILED</text>
+
+          <rect class="node-box ok" x="568" y="40" width="152" height="44" rx="5"></rect>
+          <text class="node-text ok" x="644" y="63">PARTIAL_CXL</text>
+
+          <rect class="node-box crit" x="568" y="160" width="152" height="44" rx="5"></rect>
+          <text class="node-text crit" x="644" y="183">MANUAL_REVIEW</text>
+
+          <rect class="node-box" x="753" y="40" width="145" height="44" rx="5"></rect>
+          <text class="node-text" x="825" y="63">CANCELED</text>
+        </svg>
+        </div>
+        <figcaption>
+          점선은 사람이 개입해야 하는 경로다. <strong>모든 자동 복구가 실패했을 때 갈 곳이 있다는 것</strong>이 설계의 일부이며,
+          이 경로가 없는 결제 시스템은 미확정 건을 조용히 방치한다.
+        </figcaption>
+      </figure>
+
+      <h3>전이 규칙 구현</h3>
+      <p>전이는 서비스 코드의 <code>if</code> 가 아니라 <strong>DB의 조건부 UPDATE</strong> 로 강제한다. 애플리케이션 인스턴스가 여러 개여도 이게 유일한 진실이다.</p>
+      <pre><code>UPDATE payment
+   SET status = 'APPROVED', pg_tid = ?, approved_at = ?, version = version + 1
+ WHERE payment_id = ?
+   AND status IN ('PENDING', 'UNKNOWN')   -- 허용 출발 상태를 SQL에 박는다
+   AND version = ?;
+-- affected rows = 0 이면 누군가 먼저 전이시켰다는 뜻. 예외가 아니라 분기.</code></pre>
+      <p>도메인 레벨에서는 sealed interface로 같은 규칙을 한 번 더 표현해서, 새 상태를 추가할 때 처리 누락을 컴파일 타임에 잡는다.</p>
+    </section>
+
+    <!-- ============ 05 ============ -->
+    <section id="s5">
+      <span class="sec-num">05 — Failure Modes</span>
+      <h2>결제에서 실제로 터지는 문제 10가지</h2>
+      <p class="sec-note">각 항목은 <strong>시나리오 → 왜 어려운가 → 해결 → 증명 방법</strong> 네 칸으로 쓴다. 증명 칸이 비어 있으면 구현하지 않은 것으로 친다.</p>
+
+      <details class="problem" open>
+        <summary><span class="p-key">P01</span>중복 결제 — 같은 요청이 두 번 들어온다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>사용자가 결제 버튼을 두 번 누른다. 또는 클라이언트가 응답 타임아웃 후 재요청한다. 또는 모바일 앱이 백그라운드 전환 중 재시도한다. 결과는 같다 — 같은 주문에 두 번 청구된다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>"이미 처리했는지 조회하고, 없으면 처리한다"는 <strong>조회와 처리 사이에 틈이 있다.</strong> 두 요청이 동시에 조회하면 둘 다 "없음"을 보고 둘 다 처리한다. 애플리케이션 레벨 락은 인스턴스가 늘어나면 깨진다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ol>
+              <li>클라이언트가 <code>Idempotency-Key</code> 헤더를 보낸다. 없으면 400.</li>
+              <li>PG 호출 <em>전에</em> <code>idempotency_record(key PK, request_hash, status, response_body)</code> 에 INSERT. <strong>PK 충돌이 락 역할을 한다</strong> — 애플리케이션 락 없이 DB 하나가 직렬화를 보장.</li>
+              <li>충돌 시 기존 레코드를 본다. <span class="pill ok">COMPLETED</span> 면 저장된 응답을 그대로 리턴(같은 응답, 같은 상태 코드). <span class="pill warn">IN_PROGRESS</span> 면 <code>409 Conflict</code> + <code>Retry-After</code>.</li>
+              <li>같은 키인데 <code>request_hash</code> 가 다르면 <code>422</code> — 키 재사용 공격/버그를 잡는다.</li>
+              <li>키에 TTL(24h)을 두고 배치로 정리한다.</li>
+            </ol>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>같은 멱등키로 100개 스레드 동시 요청 → PG Mock 호출 횟수 정확히 1, 승인 레코드 1건, 100개 응답의 <code>paymentId</code> 가 전부 동일. <code>CountDownLatch</code> 로 시작 시점을 맞춘 통합 테스트.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem" open>
+        <summary><span class="p-key">P02</span>미확정 결제 — 승인됐는지 안 됐는지 모른다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>PG에 승인 요청을 보냈는데 응답 전에 소켓 타임아웃이 났다. 요청이 PG에 도달하지 못했을 수도 있고, PG는 승인했는데 응답만 유실됐을 수도 있다. <strong>고객 카드에서 돈이 빠졌는지 우리는 모른다.</strong> 여기서 잘못 판단하면 무료 배송 아니면 미청구 손실이다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>타임아웃을 실패로 간주하고 <code>FAILED</code> 처리하면 실제 승인된 건이 방치된다. 성공으로 간주하면 승인 안 된 건에 상품이 나간다. 정답은 "모른다"는 상태를 <strong>1급 상태로 인정하고, 시간이 지나면 반드시 수렴시키는 것</strong>이다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ol>
+              <li><strong>PG 호출 전에 <code>PENDING</code> 을 커밋한다.</strong> WAL과 같은 원리 — 우리가 무엇을 시도했는지의 기록이 먼저 남아야 한다. 요청 없이 응답만 유실되는 경우는 없지만, 기록 없이 요청이 나가는 경우는 얼마든지 있다.</li>
+              <li>타임아웃/커넥션 에러 → <code>UNKNOWN</code> 전이 + <code>pg_probe_task</code> 등록. 사용자에게는 "확인 중"으로 응답하고 <strong>절대 성공/실패를 단정하지 않는다.</strong></li>
+              <li>Worker가 지수 백오프(10s / 30s / 2m / 10m / 1h)로 PG 거래조회 API를 호출한다. 조회 키는 우리가 만든 <code>orderId</code> — PG가 준 TID는 못 받았으므로 <strong>우리 키로 조회 가능한 PG만 쓴다</strong>는 것이 어댑터 요구사항이 된다.</li>
+              <li>조회 결과에 따라 <code>APPROVED</code> / <code>FAILED</code> 로 수렴. 승인이었다면 이 시점에 원장 이벤트가 발행된다(응답은 늦었지만 정합성은 맞는다).</li>
+              <li>조회가 계속 실패하거나 PG가 "그런 거래 없음"을 애매하게 응답하면 <strong>망취소(net cancel)</strong> 를 호출한다. 있으면 취소되고 없으면 no-op — 어느 쪽이든 <code>CANCELED</code> 로 수렴한다.</li>
+              <li>망취소까지 실패하면 <code>MANUAL_REVIEW</code>. 알람이 울리고 운영 화면에 뜬다. <strong>자동화의 한계를 인정하는 것이 설계다.</strong></li>
+            </ol>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>Toxiproxy로 응답만 끊는 시나리오(요청은 도달, 응답 유실) 실행 → 결제가 <code>UNKNOWN</code> 진입 → 30초 내 <code>APPROVED</code> 수렴 확인. 요청 자체를 끊는 시나리오 → <code>FAILED</code> 수렴. Awaitility로 상태 수렴을 검증하고, 두 경우 모두 원장 잔액이 정확한지 확인.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P03</span>DB는 커밋됐는데 Kafka 발행이 실패한다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>결제를 <code>APPROVED</code> 로 커밋하고 <code>kafkaTemplate.send()</code> 를 호출하는 순간 브로커가 죽는다. 결제는 승인됐는데 원장에는 영원히 안 들어간다. 순서를 바꿔도 마찬가지 — 발행 후 DB 커밋이 실패하면 없는 결제의 이벤트가 돌아다닌다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>DB와 Kafka는 서로 다른 리소스라 하나의 트랜잭션으로 묶을 수 없다. XA/2PC는 성능과 운영 비용이 감당이 안 된다. <code>@TransactionalEventListener(AFTER_COMMIT)</code> 는 커밋 직후 프로세스가 죽으면 그냥 유실이다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결 — Transactional Outbox</p>
+            <ol>
+              <li>결제 상태 변경과 <code>outbox_event</code> INSERT를 <strong>같은 DB 트랜잭션</strong>에 넣는다. 이제 원자성은 DB 하나가 보장한다.</li>
+              <li>별도 Relay가 <code>status='NEW'</code> 인 행을 <code>FOR UPDATE SKIP LOCKED</code> 로 배치 조회 → Kafka 발행 → <code>SENT</code> 마킹. <code>SKIP LOCKED</code> 덕분에 Relay 인스턴스를 여러 개 띄워도 안전하다.</li>
+              <li>발행 후 마킹 전에 죽으면 재발행된다 → <strong>Outbox는 at-least-once</strong>. 그래서 소비 측 멱등성(P04)이 반드시 짝을 이룬다.</li>
+              <li>초기엔 500ms 폴링 Relay로 시작하고, Phase 6에서 Debezium CDC로 교체해 폴링 지연과 DB 부하를 없앤 뒤 <strong>두 방식의 지연 분포를 비교한 기록을 남긴다.</strong></li>
+            </ol>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>부하 중 <code>docker compose kill kafka</code> → 결제 API는 계속 성공(2xx 유지) 확인. 브로커 복구 후 outbox의 <code>NEW</code> 잔량이 0으로 수렴하고, 최종 원장 건수 = 승인 건수 일치.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P04</span>컨슈머가 같은 이벤트를 두 번 처리한다 · 순서가 뒤집힌다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>원장 컨슈머가 이벤트를 처리하고 offset 커밋 전에 재기동된다 → 같은 승인이 원장에 두 번 기록되어 잔액이 두 배가 된다. 또는 <code>PaymentCanceled</code> 가 <code>PaymentApproved</code> 보다 먼저 처리되어 취소가 무시된다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>Kafka의 기본 보장은 at-least-once다. exactly-once(트랜잭셔널 프로듀서 + <code>read_committed</code>)는 Kafka 내부에서만 성립하고, <strong>컨슈머가 외부 DB에 쓰는 순간 깨진다.</strong> "Kafka가 EOS를 지원하니까 괜찮다"는 답은 면접에서 바로 파고들 지점이다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li><strong>순서</strong> — 파티션 키를 <code>paymentId</code> 로 고정한다. 같은 결제의 모든 이벤트는 같은 파티션에 들어가고 Kafka가 파티션 내 순서를 보장한다. 결제 간 순서는 애초에 의미가 없으므로 이것으로 충분하다.</li>
+              <li><strong>멱등 소비</strong> — <code>processed_event(event_id, consumer_group)</code> 복합 PK 테이블에 INSERT하는 것과 실제 처리를 <strong>같은 트랜잭션</strong>에 넣는다. 중복이면 PK 충돌로 롤백되고 조용히 ack.</li>
+              <li><strong>상태 기반 방어</strong> — 그것과 별개로, 원장 기록은 조건부 UPDATE/UNIQUE 제약으로 두 번 반영이 물리적으로 불가능하게 만든다. 방어선은 겹쳐야 한다.</li>
+              <li><code>enable.auto.commit=false</code> + 수동 ack. 처리 성공 후에만 커밋한다.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>같은 이벤트를 3회 강제 재전송 → 원장 엔트리 1건. 처리 도중 컨슈머를 <code>SIGKILL</code> → 재기동 후 중복 없이 이어서 처리. 리밸런싱 중 파티션 이동 시나리오도 동일하게 검증.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P05</span>동시 취소 · 잘못된 상태 전이</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>고객이 앱에서 취소를 누르는 동시에 CS 상담원이 어드민에서 취소를 누른다. 두 요청이 각각 PG 취소를 호출해 <strong>이중 환불</strong>이 발생한다. 또는 이미 취소된 결제에 취소가 한 번 더 들어온다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>취소는 승인보다 위험하다. 승인 중복은 멱등키로 막지만, 취소는 <strong>서로 다른 주체가 서로 다른 경로로</strong> 요청하므로 공유할 멱등키가 없다. 그리고 부분취소는 여러 번이 정상이라 "이미 했으니 무시"도 못 한다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li>PG 취소 호출 <em>전에</em> 조건부 UPDATE로 <strong>취소 권한을 선점</strong>한다: <code>UPDATE payment SET cancel_lock = ? WHERE payment_id = ? AND cancel_lock IS NULL</code>. 진 쪽은 PG를 호출조차 하지 않는다.</li>
+              <li>부분취소는 <code>cancel_request(payment_id, request_key)</code> 에 UNIQUE를 걸어 요청 단위 멱등성을 준다. 어드민은 요청 키를 UI에서 생성해 전달한다.</li>
+              <li>금액 검증은 애플리케이션이 아니라 DB 제약으로: <code>canceled_amount + ? &lt;= approved_amount</code> 를 WHERE 절에 넣고, 추가로 <code>CHECK (canceled_amount &lt;= approved_amount)</code> 를 건다. 두 요청이 각각 6천원씩 취소하려 해도 승인액 1만원을 넘지 못한다.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>1만원 결제에 6천원 부분취소 2건 동시 요청 → 하나만 성공, 다른 하나는 명시적 에러. PG Mock의 취소 호출 횟수 = 1. 최종 <code>canceled_amount</code> = 6000.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P06</span>원장이 안 맞는다 — 복식부기 불변식</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>결제 테이블의 상태 필드를 UPDATE하는 방식으로 잔액을 관리하면, 버그 하나가 과거를 조용히 덮어쓴다. "어제까지는 맞았는데 오늘 안 맞는다"가 되고 <strong>언제 무엇 때문에 틀어졌는지 추적할 방법이 없다.</strong></p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>돈은 현재 값이 아니라 변동 이력이 진실이다. 그런데 조회 성능 때문에 잔액 스냅샷도 필요하다. 둘이 어긋나는 순간을 잡아내는 장치가 없으면 스냅샷을 신뢰할 수 없다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li><code>ledger_entry</code> 는 <strong>append-only</strong>. UPDATE/DELETE 권한을 애플리케이션 DB 계정에서 아예 회수한다.</li>
+              <li>모든 거래는 최소 2개 엔트리(차변/대변)로 기록하고 <code>transaction_group_id</code> 로 묶는다. 승인이면 <code>고객미수 +10,000 / 매출 -10,000</code>.</li>
+              <li><strong>불변식: 임의 시점에 모든 엔트리 금액의 총합은 0.</strong> 이게 깨지면 어딘가에서 돈이 생기거나 사라진 것이다.</li>
+              <li>잔액 스냅샷은 파생 데이터로만 취급한다. 일 배치가 엔트리를 재집계해 스냅샷과 대조하고, 불일치를 알람으로 올린다.</li>
+              <li>금액은 <code>BigDecimal</code> 도 아닌 <strong><code>long</code> 최소 화폐 단위</strong>(원)로 저장하고 통화 코드를 함께 둔다. 부동소수점은 결제에서 논외.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>속성 기반 테스트 — 랜덤한 승인/부분취소/전체취소 시퀀스 1,000개를 생성해 적용한 뒤 <code>SUM(amount) = 0</code> 검증. 어떤 순열에서도 깨지지 않아야 한다.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P07</span>PG와 우리 장부가 다르다 — 대사(reconciliation)</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>P02의 자동 수렴을 다 돌려도, 다음 날 PG 거래내역과 우리 원장을 맞춰보면 어긋난 건이 남는다. PG 쪽에서 자체 취소했거나, 우리가 놓친 응답이 있거나, 금액이 미세하게 다르다(수수료·할부 처리).</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>실시간 정합성은 최선을 다하는 것이고, <strong>진짜 보증은 사후 대사에서 나온다.</strong> 이게 없으면 시스템은 자기가 틀렸다는 사실 자체를 모른다. 대부분의 토이 프로젝트가 여기까지 안 간다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li>Mock PG가 매일 <strong>거래내역 파일(CSV)</strong> 을 떨군다. 실제 PG의 정산 파일과 같은 형태로.</li>
+              <li>대사 배치가 <code>(orderId, amount, status)</code> 로 조인해 세 종류의 불일치를 분류: <span class="pill crit">우리만 있음</span>(PG 미승인인데 승인 처리) <span class="pill warn">PG만 있음</span>(우리가 놓친 승인) <span class="pill warn">금액 불일치</span></li>
+              <li>결과를 <code>reconciliation_result</code> 에 남기고 대시보드에 노출. 불일치 0건인 날이 정상이고, 1건이라도 있으면 알람.</li>
+              <li>자동 교정은 <strong>하지 않는다</strong>. 대사 불일치는 사람이 판단할 영역이라는 게 이 설계의 입장이고, 그 이유를 문서에 남긴다.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>Mock PG가 의도적으로 3건을 누락하고 1건의 금액을 바꾼 파일을 생성 → 대사 배치가 정확히 4건을 유형별로 잡아내는지 검증.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P08</span>재시도 폭풍 — 장애가 장애를 키운다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>PG가 느려진다 → 요청이 쌓인다 → 타임아웃이 난다 → 전부 재시도한다 → PG에 가는 부하가 2배가 된다 → 완전히 죽는다. 우리 쪽은 스레드와 커넥션이 대기로 가득 차 <strong>PG와 무관한 조회 API까지 같이 죽는다.</strong></p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>재시도는 개별적으로는 옳은 선택인데 합쳐지면 공격이 된다. 그리고 가상 스레드를 쓰면 스레드가 안 마르기 때문에 <strong>요청이 무한정 쌓이는 방향으로 문제가 옮겨간다</strong> — 스레드 풀이 자연스러운 백프레셔 역할을 하던 걸 잃는다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li><strong>서킷 브레이커</strong>(Resilience4j) — PG 어댑터에 적용. OPEN이면 즉시 실패시켜 사용자에게 빠르게 알린다. 5초 기다렸다 실패하는 것보다 즉시 실패가 낫다.</li>
+              <li><strong>Bulkhead</strong> — PG 호출 동시성을 명시적으로 제한한다. 가상 스레드가 백프레셔를 없앴으므로 세마포어로 직접 만든다. <strong>이 항목이 8장의 가상 스레드 실험과 직결된다.</strong></li>
+              <li><strong>지터 있는 지수 백오프</strong> — 고정 간격 재시도는 재시도를 동기화시켜 파도를 만든다.</li>
+              <li><strong>승인은 자동 재시도하지 않는다</strong> — 결과가 불확실한 요청의 재시도는 P02의 미확정 상태를 늘릴 뿐이다. 조회·취소만 재시도 대상.</li>
+              <li>Kafka 컨슈머는 <code>@RetryableTopic</code> 으로 논블로킹 재시도 계층(<code>retry.5s → retry.1m → retry.10m</code>) 구성 후 DLQ. 블로킹 재시도는 파티션 전체를 멈춘다.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>PG 응답을 3초로 지연시킨 상태에서 부하 → 서킷이 열리는 시점과 조회 API의 p99를 함께 측정. Bulkhead 유/무 비교에서 조회 API가 영향받지 않는 것을 그래프로 보인다.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P09</span>DLQ에 쌓인 이벤트를 아무도 안 본다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p>원장 컨슈머가 특정 이벤트에서 계속 실패해 DLQ로 간다. 승인은 났는데 원장에는 없는 상태로 <strong>몇 주가 지난다.</strong> DLQ를 만들어놓고 소비하지 않으면 그냥 잘 정리된 유실이다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>재처리는 순서를 깨뜨린다. DLQ에 간 <code>PaymentApproved</code> 를 나중에 재처리하면, 그 사이 처리된 <code>PaymentCanceled</code> 보다 뒤에 적용된다. 그냥 다시 넣으면 안 된다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li>DLQ 메시지 수를 <strong>대시보드 최상단 지표</strong>로 올리고, 1건이라도 있으면 알람. 0이 정상이다.</li>
+              <li>DLQ 조회/재처리 어드민 API를 만든다: 원본 메시지 + 실패 원인 스택 + 재시도 이력 조회, 선택 재처리, 폐기(사유 필수).</li>
+              <li>재처리는 원본 토픽으로 되돌리는 게 아니라 <strong>상태 기반 재조정</strong>으로 한다. "이 결제의 원장 상태를 결제 테이블 기준으로 다시 맞춰라" — 순서에 의존하지 않는 멱등 연산이라 언제 실행해도 안전하다.</li>
+              <li>이 재조정 로직은 P07 대사와 같은 코드를 쓴다. 실시간 복구와 사후 대사가 같은 진실을 참조해야 서로 싸우지 않는다.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>원장 컨슈머가 특정 결제에서 예외를 던지도록 주입 → 재시도 계층을 거쳐 DLQ 도달 → 알람 발생 확인 → 어드민 API로 재조정 실행 → 원장 정합 회복. 그 사이 취소가 발생한 케이스에서도 최종 상태가 옳은지 확인.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="problem">
+        <summary><span class="p-key">P10</span>이벤트 스키마를 바꿔야 한다</summary>
+        <div class="p-body">
+          <div class="p-row">
+            <p class="p-label">시나리오</p>
+            <p><code>PaymentApproved</code> 에 할부 개월 수를 추가한다. 프로듀서를 먼저 배포하면 구버전 컨슈머가 역직렬화에 실패하고, 컨슈머를 먼저 배포하면 새 필드가 없어 NPE가 난다. 토픽에는 이미 <strong>구버전 메시지가 7일치 남아 있다.</strong></p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">왜 어려운가</p>
+            <p>Kafka는 로그다. 배포로 과거를 지울 수 없고, 리플레이하면 옛날 포맷이 그대로 다시 흐른다. HTTP API의 버저닝과 근본적으로 다른 문제다.</p>
+          </div>
+          <div class="p-row">
+            <p class="p-label">해결</p>
+            <ul>
+              <li>모든 이벤트에 <code>eventId</code>, <code>eventType</code>, <code>schemaVersion</code>, <code>occurredAt</code>, <code>traceId</code> 를 envelope으로 강제한다.</li>
+              <li><strong>하위 호환 규칙</strong>: 필드 추가는 기본값과 함께만, 삭제·타입 변경·의미 변경은 금지. 필요하면 새 필드를 추가하고 구필드를 deprecated로 둔다.</li>
+              <li>깨는 변경은 <code>payment.v2.events</code> 새 토픽으로. 전환 기간에는 양쪽에 발행하고 컨슈머를 하나씩 옮긴다.</li>
+              <li>토픽 이름에 버전을 넣는 이유가 이것이다 — <code>payment.v1.events</code>.</li>
+              <li>선택 확장: Avro + Schema Registry에 <code>BACKWARD</code> 호환성 강제. 규칙을 문서가 아니라 <strong>CI가</strong> 지키게 만드는 것이 핵심이고, 최소한 스키마 호환성 검사 테스트라도 CI에 넣는다.</li>
+            </ul>
+          </div>
+          <div class="p-row proof">
+            <p class="p-label">증명</p>
+            <p>구버전 스키마로 직렬화한 메시지를 신버전 컨슈머가 정상 처리하고, 그 반대도 성립하는 계약 테스트. CI에서 스키마 변경 시 호환성 검사가 실패로 막는 것까지 확인.</p>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ============ 06 ============ -->
+    <section id="s6">
+      <span class="sec-num">06 — Kafka</span>
+      <h2>Kafka 설계</h2>
+
+      <h3>토픽</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>토픽</th><th>키</th><th>파티션</th><th>보존</th><th>용도</th></tr></thead>
+          <tbody>
+            <tr><td class="tight">payment.v1.events</td><td class="tight">paymentId</td><td class="num">12</td><td class="num">7d</td><td>승인·실패·취소 사실 이벤트. 모든 다운스트림의 원천</td></tr>
+            <tr><td class="tight">payment.v1.events.retry.{5s,1m,10m}</td><td class="tight">paymentId</td><td class="num">6</td><td class="num">3d</td><td>논블로킹 재시도 계층</td></tr>
+            <tr><td class="tight">payment.v1.events.dlq</td><td class="tight">paymentId</td><td class="num">3</td><td class="num">30d</td><td>최종 실패. 0건이 정상</td></tr>
+            <tr><td class="tight">payment.v1.probe-tasks</td><td class="tight">paymentId</td><td class="num">6</td><td class="num">7d</td><td>미확정 결제 상태 조회 지시</td></tr>
+            <tr><td class="tight">settlement.v1.tasks</td><td class="tight">merchantId</td><td class="num">6</td><td class="num">7d</td><td>정산 대상 적재</td></tr>
+            <tr><td class="tight">notification.v1.tasks</td><td class="tight">userId</td><td class="num">6</td><td class="num">1d</td><td>알림. 유실 허용 등급이 다름을 명시</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>파티션 12는 로컬 기준 과할 수 있지만, <strong>파티션은 늘리면 기존 키의 분배가 바뀌어 순서 보장이 깨지므로</strong> 처음부터 여유 있게 잡는다. 컨슈머 인스턴스를 3개까지 늘려도 균등 분배되는 수(12 = 3×4)로 선택했다.</p>
+
+      <h3>프로듀서 / 컨슈머 설정과 이유</h3>
+      <pre><code># Producer (Outbox Relay 전용)
+acks=all                      # 리더만 받고 죽으면 유실. 결제에서 허용 불가
+enable.idempotence=true       # 브로커 재시도로 인한 중복 발행 방지
+max.in.flight.requests.per.connection=5   # 멱등 프로듀서에서 순서 보장되는 상한
+retries=2147483647
+delivery.timeout.ms=120000    # 이 시간까지 못 보내면 Outbox에 NEW로 남는다 = 안전
+
+# Consumer
+enable.auto.commit=false      # 처리 성공 후에만 커밋
+isolation.level=read_committed
+max.poll.records=100          # 처리 시간 × 100 &lt; max.poll.interval.ms 유지
+max.poll.interval.ms=300000
+auto.offset.reset=earliest    # 결제 이벤트를 건너뛰는 일은 없어야 한다</code></pre>
+
+      <div class="callout">
+        <p><strong>왜 Kafka Streams / EOS를 안 쓰는가.</strong> 트랜잭셔널 프로듀서의 exactly-once는 Kafka 토픽 간에만 성립한다.
+        우리 컨슈머는 PostgreSQL에 쓰기 때문에 그 보장 밖이다. 그래서 처음부터 <strong>at-least-once + 소비 측 멱등</strong>으로 설계하고,
+        EOS를 안 쓰는 이유를 문서에 남긴다. 이 판단 자체가 어필 포인트다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 07 ============ -->
+    <section id="s7">
+      <span class="sec-num">07 — Data</span>
+      <h2>데이터 모델</h2>
+      <p class="sec-note">Flyway로 관리. 각 테이블의 존재 이유가 5장의 문제 번호와 1:1로 대응한다.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>테이블</th><th>핵심 제약</th><th>대응</th></tr></thead>
+          <tbody>
+            <tr><td class="tight">payment</td><td>PK <code>payment_id</code>, UQ <code>(merchant_id, order_id)</code>, <code>version</code> 낙관적 락, CHECK <code>canceled_amount &lt;= approved_amount</code></td><td class="tight">P01 P05</td></tr>
+            <tr><td class="tight">payment_history</td><td>append-only 상태 전이 이력 (from, to, reason, actor, at)</td><td class="tight">P02 P05</td></tr>
+            <tr><td class="tight">idempotency_record</td><td>PK <code>key</code>, <code>request_hash</code>, <code>response_body</code>, TTL</td><td class="tight">P01</td></tr>
+            <tr><td class="tight">outbox_event</td><td><code>status</code>+<code>created_at</code> 부분 인덱스(<code>WHERE status='NEW'</code>)</td><td class="tight">P03</td></tr>
+            <tr><td class="tight">processed_event</td><td>PK <code>(event_id, consumer_group)</code></td><td class="tight">P04</td></tr>
+            <tr><td class="tight">ledger_entry</td><td>append-only, UQ <code>(source_event_id, account)</code>, <code>amount BIGINT</code></td><td class="tight">P06</td></tr>
+            <tr><td class="tight">pg_probe_task</td><td><code>next_attempt_at</code> 인덱스, <code>attempt_count</code></td><td class="tight">P02</td></tr>
+            <tr><td class="tight">reconciliation_result</td><td><code>(settle_date, mismatch_type)</code></td><td class="tight">P07</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>인덱스와 파티셔닝</h4>
+      <ul>
+        <li><code>payment</code> 는 <code>created_at</code> 기준 월별 <strong>선언적 파티셔닝</strong>. 결제 조회는 대부분 최근 데이터라 오래된 파티션이 인덱스에서 빠지는 것만으로 성능이 유지된다.</li>
+        <li>조회 패턴이 확정되기 전에 인덱스를 미리 만들지 않는다. <strong>8장의 부하 테스트에서 실제 느린 쿼리를 <code>pg_stat_statements</code> 로 잡고 그때 추가한 뒤, 추가 전후를 기록한다.</strong> 이 과정 자체가 결과물이다.</li>
+        <li><code>outbox_event</code> 는 <code>SENT</code> 행을 배치로 삭제한다. 안 지우면 부분 인덱스가 커지면서 Relay 폴링이 느려진다.</li>
+      </ul>
+    </section>
+
+    <!-- ============ 08 ============ -->
+    <section id="s8">
+      <span class="sec-num">08 — Performance</span>
+      <h2>성능 계획</h2>
+      <p class="sec-note">숫자 자체보다 <strong>병목을 어떻게 찾았고 무엇을 바꿔 얼마나 좋아졌는지의 기록</strong>이 결과물이다. 튜닝 없이 나온 첫 숫자도 반드시 남긴다.</p>
+
+      <h3>목표 (로컬 단일 노드 기준)</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>지표</th><th>1차 목표</th><th>튜닝 후 목표</th><th>측정</th></tr></thead>
+          <tbody>
+            <tr><td>승인 API 처리량</td><td class="num">300 TPS</td><td class="num">1,000 TPS</td><td class="tight">k6 constant-arrival</td></tr>
+            <tr><td>승인 API p99 (PG 100ms 고정)</td><td class="num">&lt; 500 ms</td><td class="num">&lt; 300 ms</td><td class="tight">k6 + OTel span</td></tr>
+            <tr><td>승인 → 원장 반영 지연 p99</td><td class="num">&lt; 3 s</td><td class="num">&lt; 1 s</td><td class="tight">이벤트 타임스탬프 차</td></tr>
+            <tr><td>컨슈머 lag (정상 부하)</td><td class="num">&lt; 1,000</td><td class="num">&lt; 100</td><td class="tight">Kafka exporter</td></tr>
+            <tr><td>오류율</td><td class="num">0 %</td><td class="num">0 %</td><td class="tight">5xx + 미확정 잔량</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>부하 시나리오 (k6)</h3>
+      <ol>
+        <li><strong>Baseline</strong> — 목표 TPS 정상 부하 10분. 이게 기준선이다.</li>
+        <li><strong>Spike</strong> — 30초간 5배. 회복 시간과 그 사이 오류율을 본다.</li>
+        <li><strong>Slow PG</strong> — PG 응답을 500ms / 3s로 지연. 서킷과 Bulkhead 동작 확인.</li>
+        <li><strong>Flaky PG</strong> — 10% 타임아웃 주입. 미확정 결제가 얼마나 쌓이고 얼마 만에 수렴하는지.</li>
+        <li><strong>Hot merchant</strong> — 전체 트래픽의 80%가 한 가맹점에. 파티션 편중과 로우 레벨 락 경합 관찰.</li>
+        <li><strong>Broker down</strong> — 부하 중 브로커 종료 후 복구. API 성공률 유지 + Outbox 적체 해소 시간.</li>
+      </ol>
+
+      <h3>예상 병목과 대응 축</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>병목</th><th>증상</th><th>대응</th></tr></thead>
+          <tbody>
+            <tr><td><strong>DB 커넥션 풀</strong></td><td>TPS는 안 오르는데 p99만 계단식으로 상승. Hikari <code>pending</code> 지표 상승</td><td>풀 크기 조정, PG 호출 구간에서 커넥션 <strong>미보유</strong> 하도록 트랜잭션 경계 재설계</td></tr>
+            <tr><td><strong>트랜잭션 범위</strong></td><td>외부 호출이 트랜잭션 안에 들어가 커넥션을 200ms씩 잡음</td><td>PG 호출을 트랜잭션 밖으로. 상태 기록 트랜잭션을 <strong>호출 전/후 두 개</strong>로 분리 — P02의 설계와 정확히 일치한다</td></tr>
+            <tr><td><strong>Outbox 폴링 지연</strong></td><td>원장 반영 p99가 폴링 주기에 붙어서 고정</td><td>주기·배치 크기 튜닝 → 그래도 부족하면 Debezium CDC</td></tr>
+            <tr><td><strong>파티션 편중</strong></td><td>특정 파티션만 lag 증가</td><td>키 설계 재검토, 순서가 필요 없는 토픽은 키 제거</td></tr>
+            <tr><td><strong>로우 락 경합</strong></td><td>같은 가맹점 UPDATE 대기</td><td>가맹점 집계는 원장에서 배치 파생으로 빼고 핫 로우를 없앤다</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>가상 스레드 실험 — 이 프로젝트의 핵심 측정</h3>
+      <p>"Java 25 가상 스레드 썼습니다"는 아무것도 증명하지 않는다. 증명해야 하는 건 <strong>가상 스레드가 병목을 옮겼을 뿐 없애지 않았다</strong>는 사실을 직접 측정했다는 것이다.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>조건</th><th>변수</th><th>가설</th></tr></thead>
+          <tbody>
+            <tr><td class="tight">A. 플랫폼 스레드 200</td><td>Hikari 20 / 50 / 100</td><td>스레드 수에서 처리량 상한이 걸린다</td></tr>
+            <tr><td class="tight">B. 가상 스레드</td><td>Hikari 20 / 50 / 100</td><td>스레드 상한은 사라지지만 <strong>커넥션 풀이 새 상한</strong>이 된다</td></tr>
+            <tr><td class="tight">C. 가상 스레드 + Bulkhead</td><td>동시 PG 호출 100 / 300</td><td>상한이 명시적으로 통제되고 지연 분포가 안정된다</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>JDK 24의 JEP 491로 <code>synchronized</code> 로 인한 캐리어 스레드 핀닝은 해소됐다. 따라서 <strong>남은 병목은 스레드가 아니라 커넥션과 DB</strong>이고, B 조건에서 그 전환점을 그래프로 보이는 것이 목표다. 핀닝이 문제라고 답하는 것과 이걸 구분해서 답하는 것의 차이가 크다.</p>
+      <p>모든 결과는 <code>PERFORMANCE.md</code> 에 <strong>측정 환경 / 변경 내용 / before / after / 해석</strong> 다섯 칸으로 기록한다. 실패한 튜닝(효과 없었던 것)도 남긴다.</p>
+    </section>
+
+    <!-- ============ 09 ============ -->
+    <section id="s9">
+      <span class="sec-num">09 — Observability</span>
+      <h2>관측성</h2>
+
+      <h3>분산 추적</h3>
+      <p>OpenTelemetry로 <strong>HTTP 요청 → DB → Outbox → Kafka → Worker → 원장 기록</strong>까지 하나의 trace로 연결한다. 핵심은 Kafka 구간의 컨텍스트 전파 — 프로듀서가 메시지 헤더에 traceparent를 심고 컨슈머가 복원한다. Spring Kafka + OTel 자동 계측이 처리하지만, Outbox를 거치면 <strong>발행이 원래 트랜잭션과 다른 스레드·다른 시점에 일어나므로</strong> traceId를 <code>outbox_event</code> 컬럼에 저장해 직접 이어붙여야 한다. 이 디테일이 "Outbox를 실제로 만들어봤는가"를 가른다.</p>
+
+      <h3>대시보드 3종</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>대시보드</th><th>보는 사람</th><th>핵심 지표</th></tr></thead>
+          <tbody>
+            <tr><td><strong>결제 현황</strong></td><td>비즈니스</td><td>분당 승인 건수·금액, 승인 성공률, PG별 응답시간, 취소율</td></tr>
+            <tr><td><strong>시스템 건전성</strong></td><td>운영</td><td>API p50/p95/p99, 컨슈머 lag, Outbox NEW 잔량, Hikari active/pending, 서킷 상태</td></tr>
+            <tr><td><strong>정합성</strong></td><td>운영 / 재무</td><td><span class="pill warn">UNKNOWN 잔량</span> <span class="pill crit">DLQ 건수</span> <span class="pill crit">MANUAL_REVIEW 건수</span> <span class="pill crit">대사 불일치</span> 원장 총합(0이어야 함)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <p><strong>정합성 대시보드의 네 지표는 전부 "0이 정상"이다.</strong> 0이 아니면 돈이 어긋나 있다는 뜻이므로 전부 알람 대상이다.
+        지표를 이렇게 설계했다는 것 자체가 결제 도메인을 이해했다는 신호다.</p>
+      </div>
+
+      <h4>알람</h4>
+      <ul>
+        <li><span class="pill crit">P1</span> DLQ ≥ 1 · MANUAL_REVIEW ≥ 1 · 원장 총합 ≠ 0 · 대사 불일치 ≥ 1 — 즉시</li>
+        <li><span class="pill warn">P2</span> 승인 성공률 5분 이동평균 &lt; 95% · UNKNOWN 잔량 10분 이상 미해소 · 컨슈머 lag &gt; 10,000</li>
+        <li><span class="pill neutral">P3</span> p99 목표 초과 · Outbox NEW 잔량 증가 추세</li>
+      </ul>
+    </section>
+
+    <!-- ============ 10 ============ -->
+    <section id="s10">
+      <span class="sec-num">10 — Testing</span>
+      <h2>테스트 전략</h2>
+      <p class="sec-note">5장의 "증명" 칸을 실제 테스트로 옮긴 것. 테스트 목록이 곧 이 프로젝트의 주장 목록이다.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>계층</th><th>도구</th><th>무엇을 잡는가</th></tr></thead>
+          <tbody>
+            <tr><td><strong>도메인 단위</strong></td><td class="tight">JUnit 5</td><td>상태 전이 규칙 전수. sealed + switch로 케이스 누락은 컴파일러가 먼저 잡는다</td></tr>
+            <tr><td><strong>불변식 속성</strong></td><td class="tight">jqwik</td><td>랜덤 승인/취소 시퀀스 1,000개 후에도 원장 총합 = 0, <code>canceled ≤ approved</code></td></tr>
+            <tr><td><strong>통합</strong></td><td class="tight">Testcontainers<br>(Postgres + Kafka)</td><td>Outbox → Kafka → 컨슈머 → 원장 전체 경로. <strong>임베디드 Kafka 대신 실제 브로커</strong>를 쓰는 이유는 리밸런싱·offset 동작을 재현하기 위해서다</td></tr>
+            <tr><td><strong>동시성</strong></td><td class="tight">CountDownLatch<br>+ Awaitility</td><td>동시 멱등키, 동시 취소, 동시 부분취소 (P01 P05)</td></tr>
+            <tr><td><strong>카오스</strong></td><td class="tight">Toxiproxy</td><td>PG 지연·절단·응답만 유실, 브로커 종료, 컨슈머 SIGKILL (P02 P03 P04)</td></tr>
+            <tr><td><strong>계약</strong></td><td class="tight">직렬화 왕복 테스트</td><td>이벤트 스키마 상·하위 호환 (P10)</td></tr>
+            <tr><td><strong>부하</strong></td><td class="tight">k6</td><td>8장의 시나리오 6종</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>카오스 시나리오 6종 (별도 리포트로 남길 것)</h4>
+      <ol>
+        <li>PG 응답 유실 → <code>UNKNOWN</code> → 조회로 <code>APPROVED</code> 수렴</li>
+        <li>PG 요청 자체 차단 → <code>UNKNOWN</code> → 조회로 <code>FAILED</code> 수렴</li>
+        <li>PG 조회까지 계속 실패 → 망취소 → <code>CANCELED</code> 수렴</li>
+        <li>전부 실패 → <code>MANUAL_REVIEW</code> + 알람 발생</li>
+        <li>브로커 종료 중 결제 진행 → API 성공 유지 → 복구 후 Outbox 자동 해소</li>
+        <li>컨슈머 처리 중 SIGKILL → 재기동 후 중복 없이 재개</li>
+      </ol>
+      <p>각 시나리오는 <strong>스크립트 한 줄로 재현 가능</strong>해야 한다. README에 명령어를 적어두면 리뷰어가 직접 돌려볼 수 있고, 이게 이 프로젝트에서 가장 강한 인상을 남기는 부분이다.</p>
+    </section>
+
+    <!-- ============ 11 ============ -->
+    <section id="s11">
+      <span class="sec-num">11 — Roadmap</span>
+      <h2>구현 로드맵</h2>
+      <p class="sec-note">주말·평일 저녁 기준 Phase 0~8이 10주, 선택 Phase 9가 +2주. 각 Phase는 <strong>동작하는 것 + 그것을 증명하는 테스트</strong>가 모두 있어야 완료다.</p>
+
+      <div class="phase">
+        <div class="phase-id">Phase 0<span>1주</span></div>
+        <div>
+          <h3>스캐폴딩과 Mock PG</h3>
+          <ul>
+            <li>Gradle 멀티모듈 + ArchUnit 경계 테스트</li>
+            <li>docker compose: Postgres, Kafka(KRaft), Redis</li>
+            <li><strong>Mock PG 서버</strong> — 승인/취소/조회 API + 지연·실패율·응답유실을 런타임에 주입하는 제어 엔드포인트</li>
+          </ul>
+          <p class="deliver">완료 기준 — <code>docker compose up</code> 후 헬스체크 전부 통과</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 1<span>1.5주</span></div>
+        <div>
+          <h3>동기 승인 + 멱등성</h3>
+          <ul>
+            <li>결제 도메인, 상태 머신, 조건부 UPDATE 전이</li>
+            <li>멱등키 처리 (P01), <code>PENDING</code> 선기록</li>
+            <li>승인/조회 REST API</li>
+          </ul>
+          <p class="deliver">완료 기준 — 동시 100요청 테스트 통과 (P01 증명)</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 2<span>1주</span></div>
+        <div>
+          <h3>Outbox + Kafka</h3>
+          <ul>
+            <li><code>outbox_event</code> + <code>SKIP LOCKED</code> Relay</li>
+            <li>토픽 생성, 프로듀서 설정, 이벤트 envelope</li>
+            <li>원장 컨슈머 + <code>processed_event</code> 멱등 소비</li>
+          </ul>
+          <p class="deliver">완료 기준 — 브로커 종료 중 결제 성공 + 복구 후 자동 해소 (P03 P04 증명)</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 3<span>1주</span></div>
+        <div>
+          <h3>원장과 취소</h3>
+          <ul>
+            <li>복식부기 <code>ledger_entry</code>, append-only 강제</li>
+            <li>전체/부분 취소, 취소 락, 금액 제약</li>
+            <li>불변식 속성 테스트</li>
+          </ul>
+          <p class="deliver">완료 기준 — 랜덤 시퀀스 1,000회 후 총합 0 (P05 P06 증명)</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 4<span>1.5주</span></div>
+        <div>
+          <h3>장애 복구 — 이 프로젝트의 심장</h3>
+          <ul>
+            <li><code>UNKNOWN</code> 상태, probe task, 지수 백오프 조회</li>
+            <li>망취소, <code>MANUAL_REVIEW</code> 큐</li>
+            <li>재시도 토픽 계층 + DLQ + 재조정 어드민 API</li>
+            <li>서킷 브레이커, Bulkhead</li>
+          </ul>
+          <p class="deliver">완료 기준 — 카오스 시나리오 6종 전부 통과 (P02 P08 P09 증명)</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 5<span>1주</span></div>
+        <div>
+          <h3>정산과 대사</h3>
+          <ul>
+            <li>일 단위 정산 배치</li>
+            <li>Mock PG 거래내역 파일 생성 + 대사 배치</li>
+            <li>불일치 3유형 분류 및 리포트</li>
+          </ul>
+          <p class="deliver">완료 기준 — 의도적으로 심은 4건의 불일치를 유형별로 정확히 검출 (P07 증명)</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 6<span>1주</span></div>
+        <div>
+          <h3>관측성</h3>
+          <ul>
+            <li>OTel 계측, Outbox 구간 traceId 이어붙이기</li>
+            <li>Grafana 대시보드 3종 + 알람 룰</li>
+            <li>구조화 로깅(JSON) + traceId 상관</li>
+          </ul>
+          <p class="deliver">완료 기준 — 결제 1건의 전체 여정이 하나의 trace로 조회됨</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 7<span>1.5주</span></div>
+        <div>
+          <h3>성능 측정과 튜닝</h3>
+          <ul>
+            <li>k6 시나리오 6종 실행 → 기준선 기록</li>
+            <li>가상 스레드 × 커넥션 풀 매트릭스 실험</li>
+            <li>병목 특정 → 튜닝 → 재측정 → <code>PERFORMANCE.md</code></li>
+          </ul>
+          <p class="deliver">완료 기준 — before/after 그래프와 해석이 담긴 문서</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 8<span>0.5주</span></div>
+        <div>
+          <h3>포장</h3>
+          <ul>
+            <li>README — 5분 안에 돌려볼 수 있는 실행 가이드, 카오스 시나리오 재현 명령어</li>
+            <li>ADR 문서 — "왜 승인 경로에 Kafka를 안 썼는가", "왜 EOS를 안 쓰는가", "왜 대사를 자동 교정하지 않는가"</li>
+            <li>아키텍처 다이어그램, 상태 전이도</li>
+          </ul>
+          <p class="deliver">완료 기준 — 처음 보는 사람이 README만으로 카오스 시나리오를 재현</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">Phase 9<span>+2주 · 선택</span></div>
+        <div>
+          <h3>MSA 전환 — 12장 참조</h3>
+          <ul>
+            <li><code>ledger</code> 를 독립 서비스로 추출, DB 스키마 분리</li>
+            <li>전환 전후 동일 부하 시나리오 비교 측정</li>
+            <li><code>MIGRATION.md</code> — 무엇이 깨졌고 대가가 얼마였는지</li>
+          </ul>
+          <p class="deliver">착수 조건 — Phase 4·6·7 완료. 하나라도 미완이면 착수하지 않는다</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><strong>일정이 밀리면 Phase 9 → Phase 5 순으로 자른다.</strong> Phase 4를 자르면 이 프로젝트가 다른 결제 토이 프로젝트와 구분되지 않는다.
+        Phase 7도 자르면 안 된다 — 어필 축 4개 중 2개가 거기서 나온다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 12 ============ -->
+    <section id="s12">
+      <span class="sec-num">12 — Migration</span>
+      <h2>MSA 전환 시나리오 (선택 Phase)</h2>
+      <p class="sec-note">목표는 "MSA로 전환했다"가 아니다. <strong>전환의 비용이 얼마였는지를 숫자로 말할 수 있는 것</strong>이 목표다. 그건 대부분의 지원자가 못 하는 답이다.</p>
+
+      <div class="callout">
+        <p><strong>왜 "전환했다"는 어필이 약한가.</strong> 3장의 설계대로면 모듈은 이미 이벤트로만 통신하고 스키마도 분리돼 있다.
+        추출 자체는 어렵지 않다 — 즉 그 사실만으로는 증명되는 게 없다. 값이 나오는 지점은 전환 이후다:
+        무엇이 실제로 깨졌고, 지연이 얼마나 늘었고, 운영 부담이 얼마나 커졌는가.</p>
+      </div>
+
+      <h3>착수 조건</h3>
+      <p>아래 셋이 모두 끝난 뒤에만 시작한다. 하나라도 미완인 상태로 전환하면 <strong>덜 만든 프로젝트가 두 개</strong>가 될 뿐이다.</p>
+      <ul>
+        <li><strong>Phase 4 (장애 복구)</strong> — 미확정 결제 수렴이 없는 상태에서 프로세스 경계를 늘리면 실패 지점만 늘어난다.</li>
+        <li><strong>Phase 6 (관측성)</strong> — 분산 추적 없이 두 서비스를 디버깅하는 건 불가능하다. 전환의 선행조건임을 이 순서로 증명한다.</li>
+        <li><strong>Phase 7 (성능 기준선)</strong> — 비교 대상이 없으면 전환 비용을 측정할 수 없다.</li>
+      </ul>
+
+      <h3>대상: <code>ledger</code> 하나만</h3>
+      <p>전부 쪼개는 건 같은 교훈의 반복이라 분량만 늘어난다. <code>ledger</code> 를 고른 이유는 세 가지다.</p>
+      <ul>
+        <li>이미 이벤트만 소비하고 결제 상태를 변경하지 않는다 → <strong>도메인 경계가 실제로 존재</strong>한다.</li>
+        <li>그럼에도 조회 경로에서는 <code>payment</code> 와 조인이 필요하다 → <strong>DB 분리의 진짜 통증</strong>이 나온다.</li>
+        <li>돈을 다루는 모듈이라 정합성 실패가 즉시 드러난다 → 전환이 잘못됐는지 바로 알 수 있다.</li>
+      </ul>
+      <p><code>settlement</code> 는 배치라 네트워크 경계를 넘어도 아프지 않고, <code>payment</code> 자체를 쪼개는 것은 실무에서도 하지 않는 선택이라 둘 다 제외한다.</p>
+
+      <h3>전환하면 실제로 깨지는 것들</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>깨지는 것</th><th>왜</th><th>대응 · 남길 기록</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>조인이 사라진다</strong></td>
+              <td>"결제 + 원장 내역" 조회가 한 쿼리에서 두 서비스 호출로 바뀐다. 목록 조회에서 즉시 N+1</td>
+              <td>원장 서비스가 결제 요약을 <strong>읽기 모델로 복제</strong>해서 보유한다. 정규화를 포기하는 결정이므로 그 이유와 데이터 신선도(이벤트 지연 = 최대 1초)를 문서에 남긴다</td>
+            </tr>
+            <tr>
+              <td><strong>로컬 트랜잭션이 사라진다</strong></td>
+              <td>결제 상태와 원장 기록을 한 트랜잭션에 묶을 수 없다</td>
+              <td>이미 Outbox + 멱등 소비로 커버돼 있음을 <strong>확인</strong>한다. 이 항목이 아프지 않다는 것 자체가 P03·P04 설계가 옳았다는 증거다</td>
+            </tr>
+            <tr>
+              <td><strong>이벤트 스키마가 진짜 계약이 된다</strong></td>
+              <td>같은 코드베이스일 땐 컴파일러가 잡아주던 것을 이제 아무도 안 잡는다. 배포 순서가 문제가 된다</td>
+              <td>P10의 호환성 검사를 <strong>CI 필수 게이트</strong>로 승격. 여기서 처음으로 Schema Registry가 값을 한다</td>
+            </tr>
+            <tr>
+              <td><strong>장애 격리가 필요해진다</strong></td>
+              <td>원장 서비스가 죽어도 결제는 받아야 한다</td>
+              <td>결제 → 원장은 이미 비동기라 무영향. 대신 <strong>조회 경로</strong>에 서킷 브레이커와 폴백(원장 부분만 비어서 응답) 추가</td>
+            </tr>
+            <tr>
+              <td><strong>디버깅 난이도</strong></td>
+              <td>한 요청이 두 프로세스·두 DB에 걸친다</td>
+              <td>traceId 하나로 전 구간 추적되는지 재검증. <strong>Phase 6이 없었으면 여기서 막혔다</strong>는 것을 기록</td>
+            </tr>
+            <tr>
+              <td><strong>테스트가 무거워진다</strong></td>
+              <td>통합 테스트가 컨테이너 2개 → 4개</td>
+              <td>계약 테스트로 대체 가능한 범위를 나눈다. 전체 테스트 실행 시간을 전후 비교</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>측정할 것 — 이게 결과물이다</h3>
+      <p>같은 k6 시나리오(8장의 Baseline · Spike · Slow PG)를 모놀리스와 MSA 양쪽에 돌려 아래를 표로 채운다. 정직하게 채우면 <strong>대부분의 칸에서 MSA가 진다</strong>. 그게 이 실험의 핵심이다.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>지표</th><th>모놀리스</th><th>MSA</th><th>해석</th></tr></thead>
+          <tbody>
+            <tr><td>승인 API p99</td><td class="num">—</td><td class="num">—</td><td>승인 경로는 원장과 무관하므로 <strong>차이가 없어야 정상</strong>. 차이가 나면 경계를 잘못 그은 것</td></tr>
+            <tr><td>결제+원장 조회 p99</td><td class="num">—</td><td class="num">—</td><td>네트워크 홉 추가 비용. 읽기 모델 복제 전후를 각각 측정</td></tr>
+            <tr><td>승인 → 원장 반영 지연</td><td class="num">—</td><td class="num">—</td><td>이미 비동기라 차이가 작아야 한다</td></tr>
+            <tr><td>로컬 전체 기동 시간</td><td class="num">—</td><td class="num">—</td><td>개발 생산성의 실제 비용</td></tr>
+            <tr><td>전체 테스트 실행 시간</td><td class="num">—</td><td class="num">—</td><td>피드백 루프가 얼마나 느려졌는가</td></tr>
+            <tr><td>컨테이너 / 설정 파일 수</td><td class="num">—</td><td class="num">—</td><td>운영 표면적</td></tr>
+            <tr><td>장애 격리도</td><td class="num">—</td><td class="num">—</td><td>원장 서비스 강제 종료 시 결제 성공률. <strong>여기서만 MSA가 이긴다</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>전환 순서 (스트랭글러)</h3>
+      <ol>
+        <li><code>ledger</code> 스키마를 별도 DB 인스턴스로 이관. <strong>코드는 그대로</strong> 두고 커넥션만 분리 — 여기서 크로스 스키마 조인이 남아 있으면 컴파일이 깨지고, 3장의 경계 규칙이 지켜졌는지 검증된다.</li>
+        <li>조회 경로가 요구하는 결제 요약을 원장 쪽 읽기 모델로 복제. 기존 조인 제거.</li>
+        <li><code>apps/ledger-service</code> 를 추가하고 기존 워커에서 원장 컨슈머를 제거. 배포 단위 분리.</li>
+        <li>동일 부하 시나리오 재실행 → 표 채우기.</li>
+        <li><code>MIGRATION.md</code> 작성 — 각 단계에서 무엇이 깨졌고 어떻게 알았는지. <strong>실패한 시도도 남긴다.</strong></li>
+      </ol>
+
+      <div class="callout">
+        <p><strong>이 Phase의 결론이 "전환하지 말았어야 했다"여도 성공이다.</strong>
+        "이 규모에서는 모듈러 모놀리스가 옳았고, 서비스 분리가 정당화되는 조건은 X와 Y다"라고 근거를 들어 말할 수 있으면
+        MSA를 무비판적으로 쪼갠 프로젝트보다 훨씬 강하다. 그 결론을 ADR로 남긴다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 13 ============ -->
+    <section id="s13">
+      <span class="sec-num">13 — Portability</span>
+      <h2>로컬 → 클라우드 전환</h2>
+      <p class="sec-note">지금은 compose로 간다. 나중에 AWS로 옮길 때 <strong>애플리케이션 코드는 한 줄도 안 바뀌게</strong> 하는 것이 조건이다.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>구성요소</th><th>로컬 (지금)</th><th>AWS (나중)</th><th>코드 변경</th></tr></thead>
+          <tbody>
+            <tr><td>Kafka</td><td class="tight">compose · KRaft</td><td class="tight">MSK (KRaft)</td><td><span class="pill ok">없음</span> 부트스트랩 주소 + IAM 인증 설정만</td></tr>
+            <tr><td>PostgreSQL</td><td class="tight">compose</td><td class="tight">RDS / Aurora</td><td><span class="pill ok">없음</span> JDBC URL만</td></tr>
+            <tr><td>Redis</td><td class="tight">compose</td><td class="tight">ElastiCache</td><td><span class="pill ok">없음</span></td></tr>
+            <tr><td>앱 실행</td><td class="tight">compose 2 프로세스</td><td class="tight">ECS Fargate 2 서비스</td><td><span class="pill ok">없음</span> 프로파일 그대로</td></tr>
+            <tr><td>관측</td><td class="tight">Grafana + Prometheus</td><td class="tight">AMP / Grafana Cloud</td><td><span class="pill ok">없음</span> OTel exporter 주소만</td></tr>
+            <tr><td>스키마</td><td class="tight">Flyway</td><td class="tight">Flyway (배포 파이프라인)</td><td><span class="pill ok">없음</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>지금부터 지킬 규칙 (전환 가능성을 보존하는 것들)</h4>
+      <ul>
+        <li>브로커·DB·Redis 주소, 자격증명은 <strong>전부 환경변수</strong>. 코드와 <code>application.yml</code> 에 호스트명 하드코딩 금지.</li>
+        <li>로컬 파일시스템 의존 금지. 대사 파일도 추상화된 스토리지 인터페이스로 읽는다(로컬 구현 / S3 구현).</li>
+        <li>인메모리 세션·인메모리 스케줄러 상태 금지. 인스턴스는 언제든 죽고 늘어난다고 가정한다.</li>
+        <li>스케줄러(probe, 정산 배치)는 <strong>다중 인스턴스에서 중복 실행돼도 안전</strong>하게 만든다. <code>SKIP LOCKED</code> 나 DB 기반 리더 선출로. 이게 없으면 스케일아웃 순간 결제가 두 번 조회된다.</li>
+        <li>Kafka는 처음부터 KRaft. ZooKeeper 기반으로 만들면 Kafka 4.x·MSK 최신 버전과 어긋난다.</li>
+      </ul>
+
+      <p>여기까지 지키면 전환은 <code>ops/</code> 디렉토리 교체 작업이 된다. 실제로 배포까지 갈지는 나중에 정하되, <strong>"전환 가능하게 설계했고 그 근거는 이것"</strong> 이라고 말할 수 있는 상태가 이 단계의 목표다.</p>
+    </section>
+
+    <!-- ============ 14 ============ -->
+    <section id="s14">
+      <span class="sec-num">14 — Interview</span>
+      <h2>이 프로젝트를 설명할 때 나올 질문</h2>
+      <p class="sec-note">면접에서 반드시 들어올 질문들. 답이 준비 안 된 항목이 있으면 그 부분의 설계가 아직 안 끝난 것이다.</p>
+
+      <div class="qa">
+        <p class="qa-q">결제 승인에 왜 Kafka를 안 썼나요?</p>
+        <p class="qa-a">사용자가 응답을 기다리는 구간이라 동기여야 합니다. Kafka를 끼우면 "접수됨"까지밖에 응답 못 하고, 최종 결과를 폴링이나 웹소켓으로 다시 전달해야 해서 복잡도만 늘어납니다. Kafka는 승인 확정 이후의 팬아웃 — 원장·정산·알림·복구 — 에서 값을 냅니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">PG 호출이 타임아웃 나면 어떻게 하나요?</p>
+        <p class="qa-a">실패로 단정하지 않습니다. 호출 전에 <code>PENDING</code> 을 커밋해두고, 타임아웃이면 <code>UNKNOWN</code> 으로 전이한 뒤 지수 백오프로 PG 거래조회를 반복합니다. 조회로 수렴 안 되면 망취소를 호출하고, 그것도 실패하면 <code>MANUAL_REVIEW</code> 로 보내 알람을 울립니다. 자동 복구의 한계를 인정하는 경로가 있는 게 핵심입니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">Kafka의 exactly-once를 쓰면 중복 처리 문제가 해결되지 않나요?</p>
+        <p class="qa-a">트랜잭셔널 프로듀서의 EOS는 Kafka 토픽 간에만 성립합니다. 제 컨슈머는 PostgreSQL에 쓰기 때문에 그 보장 밖입니다. 그래서 at-least-once를 전제하고 <code>processed_event</code> 테이블 삽입을 처리와 같은 트랜잭션에 넣어 소비 측에서 멱등성을 확보했습니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">Outbox 대신 <code>@TransactionalEventListener(AFTER_COMMIT)</code> 로 하면 안 되나요?</p>
+        <p class="qa-a">커밋 직후 프로세스가 죽으면 이벤트가 그냥 유실됩니다. 결제 승인이 원장에 안 들어가는 경우라 허용할 수 없습니다. Outbox는 DB에 기록이 남아 있어 Relay가 언제든 다시 집어갑니다. 대신 재발행 가능성이 생기므로 소비 측 멱등성이 짝으로 필요합니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">가상 스레드를 쓰니 성능이 얼마나 좋아졌나요?</p>
+        <p class="qa-a">스레드 수 상한은 사라졌지만 처리량은 기대만큼 안 올랐고, 병목이 DB 커넥션 풀로 옮겨간 것을 측정으로 확인했습니다. JDK 24 이후 <code>synchronized</code> 핀닝은 해소돼서 문제가 아니었고, 실제 상한은 커넥션 수와 트랜잭션 범위였습니다. PG 호출을 트랜잭션 밖으로 빼고 Bulkhead로 동시성을 명시적으로 제한한 뒤 수치가 정리됐습니다. 자세한 매트릭스는 PERFORMANCE.md에 있습니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">트래픽이 10배가 되면 어디가 먼저 터지나요?</p>
+        <p class="qa-a">DB 쓰기입니다. 결제 1건당 payment, history, outbox, idempotency 4개 테이블에 씁니다. 단기적으로는 커넥션 풀·인스턴스 증설, 다음은 <code>payment</code> 월별 파티셔닝과 읽기 복제 분리, 그 다음이 가맹점 기준 샤딩입니다. Kafka 쪽은 파티션과 컨슈머 인스턴스를 늘리면 되지만 파티션 증가는 키 분배를 바꾸므로 순서 보장 영향을 먼저 검토해야 합니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">대사에서 불일치가 나오면 자동으로 고치나요?</p>
+        <p class="qa-a">고치지 않습니다. 불일치는 원인이 여러 가지고(PG 자체 취소, 우리 버그, 파일 지연) 자동 교정은 잘못된 방향으로 돈을 움직일 수 있습니다. 유형별로 분류해 리포트하고 알람만 올립니다. 자동화하지 않기로 한 판단도 ADR에 남겼습니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">MSA로 안 나눈 이유는요?</p>
+        <p class="qa-a">모듈 경계는 나눴고 배포 단위만 안 나눴습니다. Gradle 의존성과 ArchUnit으로 모듈 간 직접 호출을 금지하고 통신을 이벤트로만 제한해서, 서비스로 떼어내는 게 빌드 설정 수준의 작업이 되도록 만들었습니다. 혼자 하는 프로젝트에서 배포 단위를 먼저 쪼개면 구현 시간의 절반이 인프라 배관으로 가서, 정작 보여주고 싶은 정합성·복구 설계를 못 만듭니다.</p>
+      </div>
+      <div class="qa">
+        <p class="qa-q">(Phase 9까지 갔다면) MSA로 전환해보니 어땠나요?</p>
+        <p class="qa-a">원장 하나만 떼어내고 전후를 같은 부하로 비교했습니다. 승인 API는 원장과 무관한 경로라 차이가 없었고, 결제+원장 조회는 네트워크 홉이 늘어 p99가 올라가서 읽기 모델 복제로 되돌렸습니다 — 정규화를 포기하는 대가를 치른 겁니다. 로컬 기동 시간과 테스트 실행 시간은 눈에 띄게 늘었고, 이긴 항목은 장애 격리 하나였습니다. 결론적으로 이 규모에서는 모듈러 모놀리스가 옳았고, 서비스 분리가 정당화되려면 팀이 나뉘거나 특정 모듈만 독립적으로 스케일해야 하는 조건이 필요하다고 정리했습니다. MIGRATION.md에 수치와 함께 남겼습니다.</p>
+      </div>
+    </section>
+
+    <!-- ============ 15 ============ -->
+    <section id="s15">
+      <span class="sec-num">15 — Out of Scope</span>
+      <h2>하지 않을 것</h2>
+      <p class="sec-note">범위를 명시적으로 자르는 것도 설계다. README에 이 목록을 그대로 넣으면 "몰라서 안 한 것"과 "알고 뺀 것"이 구분된다.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>제외</th><th>이유</th></tr></thead>
+          <tbody>
+            <tr><td>실제 PG 연동 (토스·PortOne 등)</td><td>장애 주입이 불가능해 이 프로젝트의 핵심인 실패 경로를 검증할 수 없다. 어댑터 인터페이스는 분리해두어 교체 가능하게만 남긴다</td></tr>
+            <tr><td>PCI-DSS 수준 카드정보 처리</td><td>토이 범위 밖. 카드번호는 저장하지 않고 토큰만 다룬다는 전제를 문서에 명시</td></tr>
+            <tr><td>실제 화폐 다중 통화·환율</td><td>금액 모델에 통화 코드는 두되 환산은 구현 안 함</td></tr>
+            <tr><td>프론트엔드</td><td>REST + Swagger로 충분. 어드민 화면 대신 API로 제공</td></tr>
+            <tr><td>Kafka Streams 기반 실시간 집계</td><td>배치 집계로 대체. 지금 범위에서 얻는 게 없다</td></tr>
+            <tr><td>인증·인가 상세</td><td>API Key 수준으로만. 이 프로젝트가 증명하려는 축이 아니다</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="footnote">
+        이 문서는 구현 전 설계 기준선이다. Phase가 진행되면서 판단이 바뀌면 이 문서를 고치고,
+        <strong>바뀐 이유는 ADR로 따로 남긴다</strong>. 결정보다 결정의 근거가 남는 것이 이 프로젝트의 목적에 더 가깝다.
+      </p>
+    </section>
+
+  </main>
+</div>
