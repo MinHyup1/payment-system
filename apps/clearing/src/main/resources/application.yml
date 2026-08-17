@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: payment-clearing
+  profiles:
+    default: clearing
+  main:
+    web-application-type: none

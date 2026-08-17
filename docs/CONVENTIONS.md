@@ -99,7 +99,7 @@ Refs #12
 | `ops` | docker compose, Grafana 대시보드, k6 시나리오 |
 | `chore` | 그 외 잡무 |
 
-**스코프** — 모듈 또는 영역 이름을 쓴다: `payment`, `ledger`, `settlement`, `pg-adapter`, `shared-kernel`, `outbox`, `kafka`, `api`, `worker`, `ops`
+**스코프** — 모듈 또는 영역 이름을 쓴다: `payment`, `ledger`, `settlement`, `pg-adapter`, `shared-kernel`, `outbox`, `kafka`, `api`, `clearing`, `ops`
 
 **규칙**
 

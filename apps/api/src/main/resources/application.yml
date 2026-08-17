@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: payment-api
+  profiles:
+    default: api
+  # 설계서 03장 — 승인 경로는 PG 호출 대기가 지배적이다. 8장 가상 스레드 실험의 대상.
+  threads:
+    virtual:
+      enabled: true

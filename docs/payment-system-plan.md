@@ -95,8 +95,8 @@ payment-system/
 │  ├─ pg-adapter/         PgClient 인터페이스 + Mock/실PG 구현
 │  └─ shared-kernel/      이벤트 스키마, Money, 공통 에러
 ├─ apps/
-│  ├─ api/                REST 엔드포인트. profile=api
-│  └─ worker/             Kafka 리스너 + 스케줄러. profile=worker
+│  ├─ api/                REST 엔드포인트(승인·취소). profile=api
+│  └─ clearing/           매입·청산 — Kafka 리스너 + 스케줄러. profile=clearing
 └─ ops/
    ├─ compose/            kafka, postgres, redis, grafana, toxiproxy
    ├─ load/               k6 시나리오
