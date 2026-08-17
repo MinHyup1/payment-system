@@ -7,3 +7,18 @@ spring:
   threads:
     virtual:
       enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+payment:
+  security:
+    # 아래 기본값은 로컬 개발 전용이다. 운영에서는 환경변수로 반드시 덮어쓴다.
+    admin:
+      jwt-secret: ${PAYMENT_ADMIN_JWT_SECRET:local-dev-only-admin-secret-do-not-use-in-prod}
+    merchant:
+      api-keys:
+        m_1001: ${PAYMENT_MERCHANT_M1001_API_KEY:local-dev-only-merchant-key-1001}
