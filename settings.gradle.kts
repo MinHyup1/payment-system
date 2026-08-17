@@ -13,5 +13,5 @@ include(
     "modules:settlement",
     "modules:pg-adapter",
     "apps:api",
-    "apps:worker",
+    "apps:clearing",
 )

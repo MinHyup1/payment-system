@@ -1,7 +1,7 @@
 spring:
   application:
-    name: payment-worker
+    name: payment-clearing
   profiles:
-    default: worker
+    default: clearing
   main:
     web-application-type: none
