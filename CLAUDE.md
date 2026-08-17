@@ -88,7 +88,8 @@ Java 25 + Spring Boot 4 + Kafka 기반 결제 시스템.
 - **시간은 UTC `Instant`, `Clock` 주입.** `Instant.now()` 직접 호출과 `LocalDateTime` 저장 금지.
 - **카드번호 전체·CVC·유효기간을 로그에 남기지 않는다.** 카드번호는 앞 6 + 뒤 4만.
 - **`sealed` 타입 switch에 `default` 절을 쓰지 않는다.** 상태 추가 시 컴파일러가 누락을 잡아야 한다.
-- **Lombok을 쓰지 않는다.** record + 생성자 주입으로 해결한다.
+- **Lombok에서 `@Data` · `@Setter` · `@AllArgsConstructor` 는 금지.** `lombok.config` 가 컴파일 에러로 막는다. 이벤트·DTO·값 객체는 record, Lombok은 JPA 엔티티와 Spring 빈에서만.
+- **베이스 패키지는 `com.payment`.**
 - **`Thread.sleep()` 대신 Awaitility.** 테스트 메서드명은 한글 스네이크 케이스.
 
 ## 설계 판단 (바꾸려면 먼저 상의)

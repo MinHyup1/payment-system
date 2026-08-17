@@ -13,7 +13,7 @@
 |---|---|---|
 | 1 | [Git](#1--git) | 브랜치, 커밋, 머지, 태그 |
 | 2 | [이슈와 PR](#2--이슈와-pr) | 작업 단위, 라벨, 템플릿, 머지 전 체크 |
-| 3 | [코드 (Java)](#3--코드-java) | 모듈 경계, 패키지, 네이밍, Java 25 사용 지침 |
+| 3 | [코드 (Java)](#3--코드-java) | 모듈 경계, 패키지, 네이밍, Java 25 · Lombok 사용 지침 |
 | 4 | [테스트](#4--테스트) | 계층별 도구, 이름, 증명 태그 |
 | 5 | [문서](#5--문서) | ADR, 성능 리포트, README |
 
@@ -239,20 +239,20 @@ PR 템플릿에 들어가는 항목. **하나라도 안 되면 머지하지 않�
 
 ### 3.2 패키지 구조
 
-베이스 패키지는 `com.minhyup.payment` 로 한다.
+베이스 패키지는 `com.payment` 로 한다.
 
 ```
-com.minhyup.payment.<module>.<layer>
+com.payment.<module>.<layer>
 ```
 
 | 모듈 | 패키지 |
 |---|---|
-| payment-domain | `com.minhyup.payment.domain` |
-| payment-app | `com.minhyup.payment.app` |
-| ledger | `com.minhyup.payment.ledger` |
-| settlement | `com.minhyup.payment.settlement` |
-| pg-adapter | `com.minhyup.payment.pg` |
-| shared-kernel | `com.minhyup.payment.shared` |
+| payment-domain | `com.payment.domain` |
+| payment-app | `com.payment.app` |
+| ledger | `com.payment.ledger` |
+| settlement | `com.payment.settlement` |
+| pg-adapter | `com.payment.pg` |
+| shared-kernel | `com.payment.shared` |
 
 레이어는 각 모듈 안에서 `api` / `application` / `domain` / `infra` 로 나눈다. 기술별(`controller`, `service`, `repository`)이 아니라 **의존 방향별**로 나눈다 — 안쪽(domain)이 바깥쪽(infra)을 모르는 구조를 패키지가 드러내야 한다.
 
@@ -283,11 +283,56 @@ com.minhyup.payment.<module>.<layer>
 | Scoped Values | 요청 컨텍스트(멱등키, traceId, merchantId) 전파 | 가변 상태 공유 |
 | Structured Concurrency *(preview)* | 리스크 체크 + 한도 조회 병렬 fan-out | 그 외 전부 — **선택 과제이며 실패하면 걷어낸다** |
 
-- **Lombok은 쓰지 않는다.** record와 생성자 주입으로 충분하고, 애노테이션 프로세서가 Java 신버전 전환을 막는 흔한 원인이다.
 - 의존성 주입은 **생성자 주입만.** 필드 `@Autowired` 금지.
 - `sealed` 상태를 switch로 다룰 때 **`default` 절을 쓰지 않는다.** default를 쓰면 상태 추가 시 컴파일러가 잡아주지 못한다 — sealed를 쓰는 이유 자체가 사라진다.
 
-### 3.5 금액과 시간
+### 3.5 Lombok
+
+**쓴다.** 다만 "쓴다/안 쓴다"보다 **어떤 애노테이션을 쓰느냐**가 사고를 가르므로, 목록을 못박는다.
+
+**record와의 역할 분담** — 이 경계를 먼저 정하지 않으면 같은 목적에 두 가지 방식이 섞인다.
+
+| 대상 | 방식 |
+|---|---|
+| 도메인 이벤트, DTO, 값 객체(`Money` 등) | **record** — 불변이 기본값이고 Lombok이 필요 없다 |
+| JPA 엔티티, Spring 빈 | **Lombok** — 가변 상태와 프레임워크 요구사항(기본 생성자)이 있는 곳 |
+
+**허용**
+
+| 애노테이션 | 용도 |
+|---|---|
+| `@Getter` | 엔티티 접근자 |
+| `@RequiredArgsConstructor` | 생성자 주입 (`final` 필드 기준) |
+| `@Builder` | 필드가 많은 객체 생성. 특히 테스트 픽스처 |
+| `@Slf4j` | 로거 선언 |
+| `@NoArgsConstructor(access = AccessLevel.PROTECTED)` | JPA가 요구하는 기본 생성자. **`PROTECTED` 로 좁힌다** |
+
+**금지**
+
+| 애노테이션 | 이유 |
+|---|---|
+| `@Data` | `@Setter` + `@EqualsAndHashCode` + `@ToString` 을 한꺼번에 연다. 도메인 불변성이 무너지고, JPA 엔티티에서는 연관관계까지 `toString`·`equals` 에 끌려 들어가 지연로딩과 얽힌 사고가 난다 |
+| `@Setter` | 상태 변경은 **의미 있는 이름의 메서드**로 한다. `payment.approve(tid)` 이지 `payment.setStatus(APPROVED)` 가 아니다. 설계서 04장의 상태 전이 규칙이 setter 하나로 우회된다 |
+| `@AllArgsConstructor` | 필드 순서를 바꾸면 호출부가 **조용히** 깨진다. 타입이 같은 필드가 인접하면 컴파일도 통과한다. 결제 금액과 취소 금액이 둘 다 `long` 인 이 도메인에서는 특히 위험하다 |
+
+**주의해서 쓸 것**
+
+- `@EqualsAndHashCode` — JPA 엔티티에는 쓰지 않고 **식별자 기준으로 직접 구현**한다. 영속성 컨텍스트 안팎에서 동등성 기준이 달라진다.
+- `@ToString` — **카드번호·유효기간·CVC가 있는 클래스에는 붙이지 않는다.** 붙여야 하면 해당 필드에 `@ToString.Exclude` 를 반드시 건다 (3.8 로깅 규칙과 연결).
+
+**강제 방법**
+
+문서가 아니라 컴파일러가 막는다. 루트 [`lombok.config`](../lombok.config) 에서 금지 항목을 `ERROR` 로 설정했다.
+
+```properties
+lombok.data.flagUsage = ERROR
+lombok.setter.flagUsage = ERROR
+lombok.allArgsConstructor.flagUsage = ERROR
+```
+
+**버전** — Lombok은 javac 내부 API에 의존해 JDK 메이저 버전 전환 때 깨진 전력이 있다. **JDK 25를 지원하는 버전**을 쓰고, Phase 0에서 실제 컴파일로 확인한 뒤 버전을 고정한다. 여기서 막히면 record + 명시적 생성자로 후퇴하는 것이 대안이다.
+
+### 3.6 금액과 시간
 
 결제 도메인에서 가장 많이 터지는 두 가지라 별도로 못박는다.
 
@@ -303,21 +348,21 @@ com.minhyup.payment.<module>.<layer>
 - KST 변환은 표시 계층에서만.
 - 시간은 **주입받는다** (`Clock` 빈). `Instant.now()` 직접 호출은 테스트를 불가능하게 만든다.
 
-### 3.6 예외
+### 3.7 예외
 
 - 도메인 예외는 `shared-kernel` 의 sealed 계층으로 두고, 각 예외가 **에러 코드**를 갖는다.
 - REST 응답은 `@RestControllerAdvice` 한 곳에서 변환한다. 컨트롤러에서 try-catch 하지 않는다.
 - **결제에서 "모른다"는 예외가 아니라 상태다.** PG 타임아웃을 예외로 던져 실패 처리하지 말고 `UNKNOWN` 으로 전이시킨다 (설계서 P02).
 - 조건부 UPDATE의 `affected rows = 0` 은 예외가 아니라 **분기**다. 누군가 먼저 전이시켰다는 정상 정보다.
 
-### 3.7 로깅
+### 3.8 로깅
 
 - **구조화 로깅(JSON)**, `traceId` 를 모든 로그에 포함한다.
 - 로그 레벨: `ERROR`는 사람이 개입해야 하는 것만. 재시도로 해결되는 것은 `WARN`.
 - **절대 로그에 남기지 않는다** — 카드번호 전체, CVC, 유효기간, 비밀번호. 카드번호는 앞 6 + 뒤 4만 남기고 마스킹한다. 이 규칙 위반은 리뷰에서 무조건 반려한다.
 - 로그로 상태를 추적하지 않는다. 돈의 상태 변화는 `payment_history` 테이블에 남기고, 로그는 디버깅 보조다.
 
-### 3.8 포맷팅
+### 3.9 포맷팅
 
 - **Spotless + google-java-format (AOSP)** — 들여쓰기 4칸, 줄 길이 120.
 - `./gradlew spotlessApply` 로 정리하고, CI에서 `spotlessCheck` 로 강제한다.
