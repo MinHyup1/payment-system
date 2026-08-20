@@ -3,7 +3,7 @@
 > Java 25 + Spring Boot 4 로 결제 승인 API를 만들고, 승인 이후의 모든 후속 처리를 Kafka로 분리한다.
 > 이 문서의 목적은 기능 목록이 아니라 **결제에서 실제로 터지는 문제 10가지를 어떻게 막고, 막았다는 것을 어떻게 증명할지**를 먼저 정하는 것이다.
 
-**스택** — `Java 25 LTS` `Spring Boot 4.0` `Apache Kafka 4.x (KRaft)` `PostgreSQL 17` `Redis` `Testcontainers` `Toxiproxy` `k6` `OpenTelemetry` `Grafana` `Docker Compose`
+**스택** — `Java 25 LTS` `Spring Boot 4.0` `Apache Kafka 4.x (KRaft)` `MySQL 8.4` `Redis` `Testcontainers` `Toxiproxy` `k6` `OpenTelemetry` `Grafana` `Docker Compose`
 
 ---
 
@@ -98,7 +98,7 @@ payment-system/
 │  ├─ api/                REST 엔드포인트(승인·취소). profile=api
 │  └─ clearing/           매입·청산 — Kafka 리스너 + 스케줄러. profile=clearing
 └─ ops/
-   ├─ compose/            kafka, postgres, redis, grafana, toxiproxy
+   ├─ compose/            kafka, mysql, redis, grafana, toxiproxy
    ├─ load/               k6 시나리오
    └─ grafana/            대시보드 JSON
 ```
@@ -215,9 +215,9 @@ DB와 Kafka는 서로 다른 리소스라 하나의 트랜잭션으로 묶을 �
 
 **해결 — Transactional Outbox**
 1. 결제 상태 변경과 `outbox_event` INSERT를 **같은 DB 트랜잭션**에 넣는다. 이제 원자성은 DB 하나가 보장한다.
-2. 별도 Relay가 `status='NEW'` 인 행을 `FOR UPDATE SKIP LOCKED` 로 배치 조회 → Kafka 발행 → `SENT` 마킹. `SKIP LOCKED` 덕분에 Relay 인스턴스를 여러 개 띄워도 안전하다.
+2. 별도 Relay가 `status='NEW'` 인 행을 `FOR UPDATE SKIP LOCKED` 로 배치 조회 → Kafka 발행 → `SENT` 마킹. `SKIP LOCKED` 덕분에 Relay 인스턴스를 여러 개 띄워도 안전하다. MySQL 은 8.0 부터 이 구문을 지원한다.
 3. 발행 후 마킹 전에 죽으면 재발행된다 → **Outbox는 at-least-once**. 그래서 소비 측 멱등성(P04)이 반드시 짝을 이룬다.
-4. 초기엔 500ms 폴링 Relay로 시작하고, Phase 6에서 Debezium CDC로 교체해 폴링 지연과 DB 부하를 없앤 뒤 **두 방식의 지연 분포를 비교한 기록을 남긴다.**
+4. 초기엔 500ms 폴링 Relay로 시작하고, Phase 6에서 Debezium CDC(MySQL binlog 커넥터)로 교체해 폴링 지연과 DB 부하를 없앤 뒤 **두 방식의 지연 분포를 비교한 기록을 남긴다.**
 
 **증명**
 부하 중 `docker compose kill kafka` → 결제 API는 계속 성공(2xx 유지) 확인. 브로커 복구 후 outbox의 `NEW` 잔량이 0으로 수렴하고, 최종 원장 건수 = 승인 건수 일치.
@@ -393,7 +393,7 @@ auto.offset.reset=earliest    # 결제 이벤트를 건너뛰는 일은 없어�
 ```
 
 > **왜 Kafka Streams / EOS를 안 쓰는가.**
-> 트랜잭셔널 프로듀서의 exactly-once는 Kafka 토픽 간에만 성립한다. 우리 컨슈머는 PostgreSQL에 쓰기 때문에 그 보장 밖이다.
+> 트랜잭셔널 프로듀서의 exactly-once는 Kafka 토픽 간에만 성립한다. 우리 컨슈머는 MySQL에 쓰기 때문에 그 보장 밖이다.
 > 그래서 처음부터 **at-least-once + 소비 측 멱등**으로 설계하고, EOS를 안 쓰는 이유를 문서에 남긴다. 이 판단 자체가 어필 포인트다.
 
 ---
@@ -407,7 +407,7 @@ Flyway로 관리. 각 테이블의 존재 이유가 5장의 문제 번호와 1:1
 | `payment` | PK `payment_id`, UQ `(merchant_id, order_id)`, `version` 낙관적 락, CHECK `canceled_amount <= approved_amount` | P01 P05 |
 | `payment_history` | append-only 상태 전이 이력 (from, to, reason, actor, at) | P02 P05 |
 | `idempotency_record` | PK `key`, `request_hash`, `response_body`, TTL | P01 |
-| `outbox_event` | `status`+`created_at` 부분 인덱스(`WHERE status='NEW'`) | P03 |
+| `outbox_event` | 복합 인덱스 `(status, created_at)` | P03 |
 | `processed_event` | PK `(event_id, consumer_group)` | P04 |
 | `ledger_entry` | append-only, UQ `(source_event_id, account)`, `amount BIGINT` | P06 |
 | `pg_probe_task` | `next_attempt_at` 인덱스, `attempt_count` | P02 |
@@ -415,9 +415,9 @@ Flyway로 관리. 각 테이블의 존재 이유가 5장의 문제 번호와 1:1
 
 ### 인덱스와 파티셔닝
 
-- `payment` 는 `created_at` 기준 월별 **선언적 파티셔닝**. 결제 조회는 대부분 최근 데이터라 오래된 파티션이 인덱스에서 빠지는 것만으로 성능이 유지된다.
-- 조회 패턴이 확정되기 전에 인덱스를 미리 만들지 않는다. **8장의 부하 테스트에서 실제 느린 쿼리를 `pg_stat_statements` 로 잡고 그때 추가한 뒤, 추가 전후를 기록한다.** 이 과정 자체가 결과물이다.
-- `outbox_event` 는 `SENT` 행을 배치로 삭제한다. 안 지우면 부분 인덱스가 커지면서 Relay 폴링이 느려진다.
+- **`payment` 파티셔닝은 하지 않는다.** MySQL 은 모든 유니크 키가 파티션 키를 포함할 것을 요구한다. `created_at` 월별 파티셔닝을 하려면 UQ 가 `(merchant_id, order_id, created_at)` 이 되어야 하고, 그러면 **같은 `(merchant_id, order_id)` 가 다른 달에 중복 삽입될 수 있어 P01 의 물리적 방어선이 무너진다.** 정합성 제약이 성능 최적화보다 우선한다. 8장 부하 테스트가 필요성을 증명하면 그때 대안(유니크 제약만 별도 테이블로 분리 / `merchant_id` KEY 파티셔닝 / 아카이브 테이블 이관)을 검토한다. → [ADR 0001](adr/0001-mysql-over-postgresql.md)
+- 조회 패턴이 확정되기 전에 인덱스를 미리 만들지 않는다. **8장의 부하 테스트에서 실제 느린 쿼리를 Performance Schema(`events_statements_summary_by_digest`)와 slow query log 로 잡고 그때 추가한 뒤, 추가 전후를 기록한다.** 이 과정 자체가 결과물이다.
+- `outbox_event` 는 `SENT` 행을 배치로 삭제한다. MySQL 에는 부분 인덱스가 없어 `(status, created_at)` 인덱스가 전체 행을 담으므로, 안 지우면 인덱스가 커지면서 Relay 폴링이 느려진다.
 
 ---
 
@@ -503,7 +503,7 @@ OpenTelemetry로 **HTTP 요청 → DB → Outbox → Kafka → Worker → 원장
 |---|---|---|
 | **도메인 단위** | JUnit 5 | 상태 전이 규칙 전수. sealed + switch로 케이스 누락은 컴파일러가 먼저 잡는다 |
 | **불변식 속성** | jqwik | 랜덤 승인/취소 시퀀스 1,000개 후에도 원장 총합 = 0, `canceled ≤ approved` |
-| **통합** | Testcontainers (Postgres + Kafka) | Outbox → Kafka → 컨슈머 → 원장 전체 경로. **임베디드 Kafka 대신 실제 브로커**를 쓰는 이유는 리밸런싱·offset 동작을 재현하기 위해서다 |
+| **통합** | Testcontainers (MySQL + Kafka) | Outbox → Kafka → 컨슈머 → 원장 전체 경로. **임베디드 Kafka 대신 실제 브로커**를 쓰는 이유는 리밸런싱·offset 동작을 재현하기 위해서다 |
 | **동시성** | CountDownLatch + Awaitility | 동시 멱등키, 동시 취소, 동시 부분취소 (P01 P05) |
 | **카오스** | Toxiproxy | PG 지연·절단·응답만 유실, 브로커 종료, 컨슈머 SIGKILL (P02 P03 P04) |
 | **계약** | 직렬화 왕복 테스트 | 이벤트 스키마 상·하위 호환 (P10) |
@@ -529,7 +529,7 @@ OpenTelemetry로 **HTTP 요청 → DB → Outbox → Kafka → Worker → 원장
 
 ### Phase 0 — 스캐폴딩과 Mock PG *(1주)*
 - Gradle 멀티모듈 + ArchUnit 경계 테스트
-- docker compose: Postgres, Kafka(KRaft), Redis
+- docker compose: MySQL, Kafka(KRaft), Redis
 - **Mock PG 서버** — 승인/취소/조회 API + 지연·실패율·응답유실을 런타임에 주입하는 제어 엔드포인트
 
 > 완료 기준 — `docker compose up` 후 헬스체크 전부 통과
@@ -676,7 +676,7 @@ OpenTelemetry로 **HTTP 요청 → DB → Outbox → Kafka → Worker → 원장
 | 구성요소 | 로컬 (지금) | AWS (나중) | 코드 변경 |
 |---|---|---|---|
 | Kafka | compose · KRaft | MSK (KRaft) | **없음** — 부트스트랩 주소 + IAM 인증 설정만 |
-| PostgreSQL | compose | RDS / Aurora | **없음** — JDBC URL만 |
+| MySQL | compose | RDS / Aurora MySQL | **없음** — JDBC URL만 |
 | Redis | compose | ElastiCache | **없음** |
 | 앱 실행 | compose 2 프로세스 | ECS Fargate 2 서비스 | **없음** — 프로파일 그대로 |
 | 관측 | Grafana + Prometheus | AMP / Grafana Cloud | **없음** — OTel exporter 주소만 |
@@ -687,7 +687,7 @@ OpenTelemetry로 **HTTP 요청 → DB → Outbox → Kafka → Worker → 원장
 - 브로커·DB·Redis 주소, 자격증명은 **전부 환경변수**. 코드와 `application.yml` 에 호스트명 하드코딩 금지.
 - 로컬 파일시스템 의존 금지. 대사 파일도 추상화된 스토리지 인터페이스로 읽는다(로컬 구현 / S3 구현).
 - 인메모리 세션·인메모리 스케줄러 상태 금지. 인스턴스는 언제든 죽고 늘어난다고 가정한다.
-- 스케줄러(probe, 정산 배치)는 **다중 인스턴스에서 중복 실행돼도 안전**하게 만든다. `SKIP LOCKED` 나 DB 기반 리더 선출로. 이게 없으면 스케일아웃 순간 결제가 두 번 조회된다.
+- 스케줄러(probe, 정산 배치)는 **다중 인스턴스에서 중복 실행돼도 안전**하게 만든다. `SKIP LOCKED` 기반 작업 테이블로 한다. MySQL `GET_LOCK()` 은 세션 스코프라 커넥션 풀에 반납돼도 락이 남아 위험하므로 쓰지 않는다. 이게 없으면 스케일아웃 순간 결제가 두 번 조회된다.
 - Kafka는 처음부터 KRaft. ZooKeeper 기반으로 만들면 Kafka 4.x·MSK 최신 버전과 어긋난다.
 
 여기까지 지키면 전환은 `ops/` 디렉토리 교체 작업이 된다. 실제로 배포까지 갈지는 나중에 정하되, **"전환 가능하게 설계했고 그 근거는 이것"** 이라고 말할 수 있는 상태가 이 단계의 목표다.
@@ -705,7 +705,7 @@ OpenTelemetry로 **HTTP 요청 → DB → Outbox → Kafka → Worker → 원장
 실패로 단정하지 않습니다. 호출 전에 `PENDING` 을 커밋해두고, 타임아웃이면 `UNKNOWN` 으로 전이한 뒤 지수 백오프로 PG 거래조회를 반복합니다. 조회로 수렴 안 되면 망취소를 호출하고, 그것도 실패하면 `MANUAL_REVIEW` 로 보내 알람을 울립니다. 자동 복구의 한계를 인정하는 경로가 있는 게 핵심입니다.
 
 **Q. Kafka의 exactly-once를 쓰면 중복 처리 문제가 해결되지 않나요?**
-트랜잭셔널 프로듀서의 EOS는 Kafka 토픽 간에만 성립합니다. 제 컨슈머는 PostgreSQL에 쓰기 때문에 그 보장 밖입니다. 그래서 at-least-once를 전제하고 `processed_event` 테이블 삽입을 처리와 같은 트랜잭션에 넣어 소비 측에서 멱등성을 확보했습니다.
+트랜잭셔널 프로듀서의 EOS는 Kafka 토픽 간에만 성립합니다. 제 컨슈머는 MySQL에 쓰기 때문에 그 보장 밖입니다. 그래서 at-least-once를 전제하고 `processed_event` 테이블 삽입을 처리와 같은 트랜잭션에 넣어 소비 측에서 멱등성을 확보했습니다.
 
 **Q. Outbox 대신 `@TransactionalEventListener(AFTER_COMMIT)` 로 하면 안 되나요?**
 커밋 직후 프로세스가 죽으면 이벤트가 그냥 유실됩니다. 결제 승인이 원장에 안 들어가는 경우라 허용할 수 없습니다. Outbox는 DB에 기록이 남아 있어 Relay가 언제든 다시 집어갑니다. 대신 재발행 가능성이 생기므로 소비 측 멱등성이 짝으로 필요합니다.
