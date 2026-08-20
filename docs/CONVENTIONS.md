@@ -382,7 +382,7 @@ lombok.allArgsConstructor.flagUsage = ERROR
 |---|---|---|
 | 도메인 단위 | JUnit 5 | `PaymentStateMachineTest` |
 | 불변식 속성 | jqwik | `LedgerInvariantPropertyTest` |
-| 통합 | Testcontainers (Postgres + Kafka) | `OutboxRelayIntegrationTest` |
+| 통합 | Testcontainers (MySQL + Kafka) | `OutboxRelayIntegrationTest` |
 | 동시성 | CountDownLatch + Awaitility | `IdempotencyConcurrencyTest` |
 | 카오스 | Toxiproxy | `PgTimeoutChaosTest` |
 | 계약 | 직렬화 왕복 | `PaymentEventContractTest` |
